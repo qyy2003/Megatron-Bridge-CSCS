@@ -105,59 +105,99 @@ python3.11 data/build_blend.py --train-tokens 500e9  # -> $DATA_ROOT/blends/ligh
 
 ```bash
 ./launch.sh smoke                    # 2 nodes, debug partition: whole pipeline in ~7 min (verified)
-DRYRUN=1 ./launch.sh train 16 100000 # resolve + validate the full config (1-node job)
+DRYRUN=1 ./launch.sh train 16 1T     # resolve + validate the full config (1-node job)
 ./launch.sh throughput 8             # full model, 30 steps, mock data, network logs
-./launch.sh train 16 300000          # real data, checkpoints, auto-resume/resubmit
+./launch.sh train 16 1T              # real data, 1T tokens, batch ramp, checkpoints, auto-resume/resubmit
 ```
 
 `launch.sh` validates cheap things before anything is queued (divisibility, patches apply to
 the pinned commits, image/data/tokenizer present, generated script parses) and
 `train/pretrain.py` rejects config overrides that do not exist (Bridge itself would only warn).
 Knobs are environment variables, see the header of `launch.sh`; any config field can be set
-with `EXTRA="key=value ..."`.
+with `EXTRA="key=value ..."`. A broken node can be avoided with `SBATCH_EXCLUDE=nid00XXXX`.
+
+### Global batch size ramp (DeepSeek-style)
+
+In train mode the budget is given in tokens and the global batch grows like DeepSeek-V2/V3
+(V3: 3072 → 15360 sequences over its first 469B of 14.8T tokens): by default from 512 to 2560
+sequences (**2.1M → 10.5M tokens per batch**) in 4 equal steps over the first 3% of the run.
+`launch.sh` prints the schedule it submits, e.g. for `./launch.sh train 8 1T`:
+
+```
+  from iteration        1  (        0 tokens):   512 sequences =  2.10M tokens/batch
+  from iteration     3578  (   7.502B tokens):  1024 sequences =  4.19M tokens/batch
+  from iteration     5366  (      15B tokens):  1536 sequences =  6.29M tokens/batch
+  from iteration     6558  (    22.5B tokens):  2048 sequences =  8.39M tokens/batch
+  from iteration     7453  (   30.01B tokens):  2560 sequences = 10.49M tokens/batch
+  total: 99958 iterations, 1T tokens; LR warmup 1.049B tokens, decay over all of them
+```
+
+- `GBS_RAMP=START:FINAL:STEPS:LENGTH` (LENGTH in tokens or `%` of the run), `GBS_SCHEDULE="0:512
+  20B:1024 ..."` for an explicit schedule, `GBS_RAMP=none GBS=1024` for a constant batch. Every
+  batch size must be a multiple of MBS × data-parallel size (checked before submitting).
+- The LR schedule is counted in samples, so it is unchanged by the ramp: warmup `WARMUP_TOKENS`
+  (default 1.05B = the recipe's 500 steps × 512 × 4096), cosine to `MIN_LR` over the whole budget.
+- Megatron-Bridge v0.6.2 cannot do this by itself: Megatron-Core ignores the deprecated
+  `rampup_batch_size` and Bridge does not pass `step_batch_size_schedule` —
+  `patches/megatron-bridge/0001-step-batch-size-schedule.patch` fixes that.
+- With PP the CUDA graphs are captured per microbatch count, so the batch does not grow inside a
+  running process: at the last iteration of each batch size the trainer saves a checkpoint and
+  stops, and the job restarts training in the same allocation (a few minutes per step, 4 times per
+  run); the new process resumes with the larger batch.
 
 ### Parallel layout on GH200
 
-GB200 has 186 GB per GPU and an NVL72 domain; the recipe puts EP=8 on 8 GPUs. On GH200
-(95.6 GiB, 4 GPUs per NVLink domain, Slingshot between nodes) the static state alone of that
-layout is ~93 GB/GPU. Per-GPU static memory (bf16 params, fp32 Adam via the distributed
-optimizer, TP=PP=1; the model has 35.5B parameters incl. the MTP layer: 33.0B routed-expert
-+ 2.5B other):
+**How the parallelism works.** Megatron's "MoE parallel folding" gives the two halves of the
+model separate grids on the same GPUs:
 
-| Layout | params + grads | optimizer | static (+ activations, ~30 GB at MBS 1 × 4096) |
-|---|---|---|---|
-| 8 GPUs, EP=8, fp32 grads (GB200 recipe) | 40 GB | 53 GB | 93 GB |
-| 32 GPUs, EP=4, bf16 grads | 43 GB | 13 GB | 56 GB |
-| 64 GPUs, EP=4, bf16 grads | 43 GB | 7 GB | 50 GB |
-| 32 GPUs, EP=8, fp32 grads | 40 GB | 13 GB | 53 GB |
+```
+dense part  (gated attention, Gated DeltaNet, norms, router, shared expert, embeddings: 2.5B, 7%)
+            -> TP x CP x DP x PP
+routed experts (256 x top-8:  33.0B, 93%)
+            -> ETP x EP x expert-DP x PP
+```
 
-How the parallelism works (Megatron "MoE parallel folding"): EP shards only the routed
-experts. The dense part — gated attention, Gated DeltaNet, norms, router, shared expert,
-embeddings/output — has its own TP×CP×DP grid on the same GPUs. With TP=1 every GPU holds the
-dense part (~7% of the parameters) and runs attention/GDN for its own sequences; the MoE
-all-to-all then moves tokens between the 4 GPUs of a node that own the experts. TP=1 is also
-what NVIDIA uses for this model class (thin model, hidden 2048: TP adds 4 collectives per
-layer and narrows the GEMMs). TP=2 (or 4 with KV-head replication; Qwen3.5 has 2 KV heads)
-with sequence parallel is supported (`TP=2`) and halves the dense activations, e.g. the
-248k-vocab logits, which is the main way to afford MBS 2. MBS does not change training (GBS
-is fixed); it trades gradient-accumulation steps for per-microbatch efficiency.
+So "EP for the feed-forward experts, TP/SP for attention" is directly supported (e.g. `TP=2 EP=4`:
+attention and GDN tensor-parallel with sequence parallelism, experts expert-parallel). We measured it
+and do not use it here: TP shards only the 7% dense part (the experts stay whole per EP rank,
+ETP=1), so TP=2 saved just ~3 GB of static memory per GPU, and it was 25–40% slower per GPU (hidden
+size 2048 is thin: TP halves already-small GEMMs and adds 4 collectives per layer). What has to be
+sharded is the experts: by EP (EP > 4 leaves the node: all-to-all 40 vs 334 GB/s), by more data
+parallelism (optimizer shards) or by **pipeline parallelism**, which halves everything per GPU.
 
-Default: **EP=4, PP=2** (the expert all-to-all stays on NVLink inside a node; only
-data-/pipeline-parallel traffic crosses Slingshot), TP=CP=1, MBS=1, GBS=512, seq 4096, bf16
-gradient reduction (`GRAD_FP32=0`, what NVIDIA's own Hopper MoE recipe for Qwen3-30B-A3B uses),
-at ≥ 8 nodes. The PP=1 rows above do not fit in practice: measured activations add ~24 GB at
-MBS 1 (mostly the two 248k-vocab logit tensors of the main and MTP heads), and the 8-node PP=1
-run failed with `Triton Error [CUDA]: out of memory`; PP=2 halves the static memory (memory
-model and probes in `WORKLOG.md`). MBS and dispatcher defaults are being benchmarked at 8 nodes.
+**Memory** (measured, full model on 8 nodes, details in `WORKLOG.md`): a stage of 20 layers holds
+~39 GB of weights, gradients and optimizer shards (the last stage ~44 GB: output layer, MTP layer);
+activations are ~0.57 GB per layer per 4096-token microbatch plus ~12 GB for the two 248k-vocab
+logit tensors (main and MTP head). PP=1 does not fit (~85 GB peak plus CUDA/NCCL, the 8-node run
+died with `Triton Error [CUDA]: out of memory`); keep the peak below ~80 GB on a 95.6 GB GH200.
+
+**Micro-batch size.** The global batch is fixed, so MBS does not change the training math, only the
+efficiency (bigger GEMMs, fewer launches per token) against activation memory. With PP=2, MBS 2
+needs ~86 / ~92 GB and fails (measured); MBS 2 requires PP=4. (The GB200 recipe notes that even
+186 GB GPUs OOM at MBS 4 with learned routing.)
+
+Measured on 8 nodes (32 GH200), full model, mock data, GBS 512 × 4096, iterations 11–30:
+
+| Layout | Peak GB (first / last stage) | s / iteration | tokens/s/GPU | TFLOP/s/GPU |
+|---|---|---|---|---|
+| EP4 PP1 MBS1 | OOM | – | – | – |
+| EP4 PP2 MBS1, alltoall | 62.5 / 68.1 | 12.86 | 5,100 | 115 |
+| EP4 PP2 MBS1, **HybridEP** | 62.1 / 68.2 | **11.68** | **5,610** | **127** |
+| EP4 PP2 MBS2 | OOM | – | – | – |
+| EP4 PP4 MBS2, alltoall | pending | | | |
+| EP4 PP2 MBS1, CUDA graphs off | pending | | | |
+
+Default: **EP=4, PP=2**, TP=CP=1, MBS=1, seq 4096, bf16 gradient reduction (`GRAD_FP32=0`, what
+NVIDIA's own Hopper MoE recipe for Qwen3-30B-A3B uses), ≥ 8 nodes; global batch 512 → 2560 (ramp).
 
 ### Deviations from the GB200 recipe (`conf/qwen35_35b_a3b_gh200.yaml` + launch.sh)
 
 | Setting | GB200 recipe | Here | Why |
 |---|---|---|---|
-| MoE dispatcher | flex / HybridEP | `alltoall` | HybridEP/DeepEP cross-node paths need InfiniBand GPU-initiated RDMA; Slingshot has none |
+| MoE dispatcher | flex / HybridEP | HybridEP while the expert group is inside a node (`DISPATCHER=auto`), else `alltoall` | HybridEP/DeepEP cross-node paths need InfiniBand GPU-initiated RDMA, which Slingshot lacks; HybridEP's NVLink path works and is 10% faster at EP=4 |
 | TP comm overlap | on | off | TP=1 (Bridge would disable it anyway) |
 | DP overlap (grad RS / param AG) | off | on | DP traffic crosses Slingshot here |
-| EP | 8 | 4 (`EP`) | memory + keep all-to-all on NVLink |
+| EP / PP | EP 8, PP 1 | EP 4, PP 2 (`EP`, `PP`) | memory (95.6 vs 186 GB) + keep all-to-all on NVLink |
 | grad reduce | fp32 | bf16 (`GRAD_FP32=0`) | memory; NVIDIA Hopper MoE practice |
 | logging | every 10 steps | every step, throughput + memory + timers | |
 | NCCL timeout | 10 min | 30 min | first-step JIT / CUDA-graph capture |

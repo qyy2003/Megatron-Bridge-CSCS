@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Usage: ./launch.sh <mode> [nodes] [steps]
+# Usage: ./launch.sh <mode> [nodes] [steps | tokens]
 #
 # Modes:
 #   smoke       Pipeline check (2 nodes, debug partition): the real Qwen3.5 architecture
@@ -9,30 +9,42 @@
 #               logging (NETLOG=2) and an nsys capture of steps 10-12 on rank 0.
 #   throughput  Full Qwen3.5-35B-A3B, default 8 nodes, 30 steps, no eval, no checkpoints.
 #               Mock data unless BLEND is set.
-#   train       Full model on the tokenized Lightning blend (BLEND), checkpoints every
-#               SAVE_INTERVAL steps, auto-resume and auto-resubmit until <steps> is reached.
+#   train       Full model on the tokenized Lightning blend (BLEND) for a token budget (1T, 500B,
+#               2.5e12; a plain integer is an iteration count), checkpoints every SAVE_INTERVAL
+#               steps, auto-resume and auto-resubmit until done. The global batch size ramps up
+#               DeepSeek-style from 2.1M to 10.5M tokens over the first 3% of the run (GBS_RAMP).
 #
 # Examples:
 #   ./launch.sh smoke
 #   ./launch.sh throughput 8
 #   EP=8 GRAD_FP32=1 ./launch.sh throughput 16 50
 #   NSYS=1 NSYS_STEPS=20:22 NSYS_RANKS=0,4 ./launch.sh throughput 8 30
-#   ./launch.sh train 16 200000
-#   DRYRUN=1 ./launch.sh train 16 200000      # resolve + print the config (1-node debug job)
-#   SUBMIT=0 ./launch.sh train 16 200000      # only write logs/<job>.sbatch
+#   ./launch.sh train 16 1T                   # batch 512 -> 2560 sequences over the first 30B tokens
+#   GBS_RAMP=none GBS=1024 ./launch.sh train 16 500B   # constant global batch size
+#   DRYRUN=1 ./launch.sh train 16 1T          # resolve + print the config (1-node debug job)
+#   SUBMIT=0 ./launch.sh train 16 1T          # only write logs/<job>.sbatch
 #
 # Knobs (environment variables, [default]):
 #   EP [4] TP [1] PP [2] CP [1] ETP [1]   parallel sizes; EP=4 keeps the expert all-to-all
 #                                         inside a node (NVLink), only DP/PP traffic crosses Slingshot;
 #                                         PP=2 halves the static memory (PP=1 does not fit, WORKLOG.md)
 #   MBS [1] GBS [512] SEQ_LEN [4096]      micro/global batch, sequence length (recipe values)
+#   GBS_RAMP [train: 512:2560:4:3%, else none]   START:FINAL:STEPS:LENGTH: the global batch grows
+#                       from START to FINAL sequences in STEPS equal steps over the first LENGTH
+#                       tokens (or % of the run), like DeepSeek-V2/V3; none = constant GBS.
+#                       Each step ends the training process at a checkpoint and restarts it in the
+#                       same job (CUDA graphs are captured per microbatch count).
+#   GBS_SCHEDULE        explicit schedule instead: "TOKENS:BATCH TOKENS:BATCH ..." (first at 0)
+#   WARMUP_TOKENS [1.05B]  LR warmup with a batch schedule (= the recipe's 500 steps x 512 x 4096)
 #   GRAD_FP32 [0]       1 = fp32 gradient reduction as in the GB200 recipe (+~20 GB/GPU at EP=4);
 #                       0 = bf16, as NVIDIA's Hopper MoE recipes (Qwen3-30B-A3B H100) do
 #   CUDA_GRAPHS [1]     0 = disable the recipe's TE-scoped CUDA graphs (attn, moe_router, moe_preprocess)
-#   DISPATCHER [alltoall]  MoE token dispatcher: alltoall (NCCL) | hybridep (the GB200 recipe's
-#                       fused NVLink dispatcher; only with the expert group inside a node, EP*ETP <= 4)
+#   DISPATCHER [auto]   MoE token dispatcher: hybridep (the GB200 recipe's fused NVLink dispatcher,
+#                       +10% at 8 nodes; only with the expert group inside a node, EP*ETP <= 4) |
+#                       alltoall (NCCL) | auto = hybridep if EP*ETP <= 4, else alltoall
 #   RECOMPUTE [none]    selective = recompute moe_act + layernorm (activation memory)
-#   LR MIN_LR WARMUP    learning-rate schedule [recipe: 3e-4 -> 3e-5 cosine, 500 warmup steps]
+#   LR MIN_LR WARMUP    learning-rate schedule [recipe: 3e-4 -> 3e-5 cosine, 500 warmup steps;
+#                       with a batch schedule the warmup is WARMUP_TOKENS and the cosine spans the run]
 #   BLEND               blend JSON from data/build_blend.py [train: $DATA_ROOT/blends/lightning35_qwen35.json]
 #   NETLOG [2]          0 off | 1 NIC + NVLink counters and per-step W&B net metrics
 #                       | 2 + NCCL inspector, every collective and P2P op | 3 + per-op timestamps
@@ -59,7 +71,8 @@ hms_to_mins() {
 EP=${EP:-4}; TP=${TP:-1}; PP=${PP:-2}; CP=${CP:-1}; ETP=${ETP:-1}
 MBS=${MBS:-1}; SEQ_LEN=${SEQ_LEN:-4096}
 GRAD_FP32=${GRAD_FP32:-0}; CUDA_GRAPHS=${CUDA_GRAPHS:-1}; RECOMPUTE=${RECOMPUTE:-none}
-DISPATCHER=${DISPATCHER:-alltoall}
+DISPATCHER=${DISPATCHER:-auto}
+if [ "$DISPATCHER" = auto ]; then (( EP * ETP <= 4 )) && DISPATCHER=hybridep || DISPATCHER=alltoall; fi
 NSYS_STEPS=${NSYS_STEPS:-10:12}; NSYS_RANKS=${NSYS_RANKS:-0}; NSYS_TRACE=${NSYS_TRACE:-cuda,nvtx}
 EVAL_ITERS=${EVAL_ITERS:-32}
 SUMMARIZE=1
@@ -76,9 +89,8 @@ case $MODE in
         # One 4-layer block of the real pattern (3x Gated DeltaNet + 1 gated attention): the
         # bridge stores the 40-entry per-layer pattern, so replace it by its period.
         OVERRIDES+=(model.num_layers=4 model.linear_attention_freq=4 model.num_moe_experts=32
-                    validation.eval_interval=10 validation.eval_iters=2
-                    scheduler.lr_warmup_iters=5
-                    checkpoint.save_interval=15)
+                    validation.eval_interval=10 validation.eval_iters=2)
+        WARMUP=${WARMUP:-5}; SAVE_INTERVAL=${SAVE_INTERVAL:-15}
         CKPT=save; RESUBMIT=false; MAX_RESUBMITS=0
         ;;
     throughput)
@@ -86,12 +98,15 @@ case $MODE in
         GBS=${GBS:-512}
         PARTITION=${PARTITION:-normal}; WALLTIME=${WALLTIME:-01:00:00}
         NETLOG=${NETLOG:-2}; NSYS=${NSYS:-0}
-        OVERRIDES+=(validation.eval_interval=null scheduler.lr_warmup_iters=10)
+        # No evaluation at all: Bridge would otherwise run the full validation + test sets after the
+        # last step (32 iterations each at the global batch size, ~3 min each at GBS 512 on 8 nodes).
+        OVERRIDES+=(validation.eval_interval=null validation.eval_iters=0 scheduler.lr_warmup_iters=10)
         CKPT=none; RESUBMIT=false; MAX_RESUBMITS=0
         ;;
     train)
-        NODES=${2:?$USAGE}; STEPS=${3:?$USAGE}
-        GBS=${GBS:-512}
+        NODES=${2:?$USAGE}; BUDGET=${3:?$USAGE}
+        if [[ $BUDGET =~ ^[0-9]+$ ]]; then STEPS=$BUDGET; else TRAIN_TOKENS_ARG=$BUDGET; STEPS=0; fi
+        GBS=${GBS:-512}; GBS_RAMP=${GBS_RAMP:-512:2560:4:3%}
         PARTITION=${PARTITION:-normal}; WALLTIME=${WALLTIME:-12:00:00}
         NETLOG=${NETLOG:-2}; NSYS=${NSYS:-0}
         BLEND=${BLEND:-$DATA_ROOT/blends/lightning35_qwen35.json}
@@ -108,6 +123,33 @@ MP=$((TP * PP * CP))
 if (( WORLD % MP != 0 )); then echo "world size $WORLD not divisible by TP*PP*CP=$MP"; exit 1; fi
 DP=$((WORLD / MP))
 if (( WORLD % (EP * ETP * PP) != 0 )); then echo "world size $WORLD not divisible by EP*ETP*PP"; exit 1; fi
+
+################ Global batch size schedule ################
+# Megatron-Core's step_batch_size_schedule (patches/megatron-bridge/0001-*): tools/batch_schedule.py
+# turns the ramp into the schedule string, the iteration count for a token budget and LR
+# warmup/decay lengths in final-size batches (Bridge counts the LR schedule in samples).
+BATCH_SCHEDULE=0
+GBS_RAMP=${GBS_RAMP:-none}
+if [ -n "${GBS_SCHEDULE:-}" ] || [ "$GBS_RAMP" != none ] || [ -n "${TRAIN_TOKENS_ARG:-}" ]; then
+    if [ -n "${GBS_SCHEDULE:-}" ]; then SCHED_ARG=(--schedule "$GBS_SCHEDULE")
+    elif [ "$GBS_RAMP" != none ]; then SCHED_ARG=(--ramp "$GBS_RAMP")
+    else SCHED_ARG=(--schedule "0:$GBS"); fi   # constant batch, token budget
+    if [ -n "${TRAIN_TOKENS_ARG:-}" ]; then BUDGET_ARG=(--train-tokens "$TRAIN_TOKENS_ARG"); else BUDGET_ARG=(--train-iters "$STEPS"); fi
+    SCHED_OUT=$(python3.11 "$WORKDIR/tools/batch_schedule.py" --seq-length "$SEQ_LEN" "${SCHED_ARG[@]}" \
+        "${BUDGET_ARG[@]}" --warmup-tokens "$([ "$MODE" = train ] && echo "${WARMUP_TOKENS:-1048576000}" || echo 0)" \
+        --divisor $((MBS * DP))) || exit 1
+    eval "$SCHED_OUT"
+    STEPS=$TRAIN_ITERS
+    if [ -n "${GBS_SCHEDULE:-}" ] || [ "$GBS_RAMP" != none ]; then
+        [ "$MODE" = throughput ] && { echo "batch-size schedules restart from checkpoints: smoke or train mode only"; exit 1; }
+        [ -n "${WARMUP:-}" ] && [ "$MODE" = train ] && { echo "with a batch-size schedule set WARMUP_TOKENS, not WARMUP"; exit 1; }
+        BATCH_SCHEDULE=1; GBS=$FINAL_GBS
+        GBS_FIRST=${SCHEDULE#*:}; GBS_FIRST=${GBS_FIRST%% *}
+        OVERRIDES+=("train.step_batch_size_schedule='$SCHEDULE'" scheduler.lr_decay_iters=$LR_DECAY_ITERS)
+        [ "$MODE" = train ] && WARMUP=$LR_WARMUP_ITERS
+        CKPT=save_load   # every batch-size step resumes from the checkpoint written at the step
+    fi
+fi
 if (( GBS % (MBS * DP) != 0 )); then echo "GBS=$GBS must be a multiple of MBS*DP=$((MBS * DP))"; exit 1; fi
 [ -f "$IMAGE_DIR/$IMAGE_NAME" ] || { echo "image $IMAGE_DIR/$IMAGE_NAME missing: sbatch env/build_image.sbatch"; exit 1; }
 [ -f "$HF_HOME/.prefetched-${HF_MODEL_ID//\//--}" ] || { echo "run tools/prefetch_hf.sh first (Qwen3.5 config/tokenizer for offline jobs)"; exit 1; }
@@ -169,7 +211,7 @@ esac
 [ -n "${WARMUP:-}" ] && OVERRIDES+=(scheduler.lr_warmup_iters=$WARMUP)
 case $CKPT in
     none) OVERRIDES+=(checkpoint.save=null checkpoint.load=null) ;;
-    save) OVERRIDES+=(checkpoint.save=RUN_DIR/checkpoints checkpoint.load=null) ;;
+    save) OVERRIDES+=(checkpoint.save=RUN_DIR/checkpoints checkpoint.load=null checkpoint.save_interval=$SAVE_INTERVAL) ;;
     save_load)
         EXIT_MINS=$(( $(hms_to_mins "$WALLTIME") - 15 ))
         OVERRIDES+=(checkpoint.save=RUN_DIR/checkpoints checkpoint.load=RUN_DIR/checkpoints
@@ -181,7 +223,7 @@ esac
 ################ Names and paths ################
 TAG="q35a3b-${NODES}n-ep${EP}"
 (( TP > 1 )) && TAG+="-tp$TP"; (( PP > 1 )) && TAG+="-pp$PP"; (( CP > 1 )) && TAG+="-cp$CP"
-TAG+="-mbs${MBS}-gbs${GBS}-sl${SEQ_LEN}"
+TAG+="-mbs${MBS}-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}"
 [ "$GRAD_FP32" = 1 ] && TAG+="-gf32"; [ "$CUDA_GRAPHS" = 0 ] && TAG+="-nocg"; [ "$RECOMPUTE" != none ] && TAG+="-rc"
 [ "$DISPATCHER" != alltoall ] && TAG+="-$DISPATCHER"
 if [ "$MODE" = train ]; then
@@ -190,7 +232,7 @@ if [ "$MODE" = train ]; then
     # optimizer state is saved DP-reshardable (Megatron default), so TP/PP/CP/EP/ETP must
     # stay fixed for the life of a run (checked below) unless it was saved with
     # checkpoint.dist_ckpt_optim_fully_reshardable=true.
-    EXP_NAME="train-q35a3b-gbs${GBS}-sl${SEQ_LEN}${EXP_SUFFIX:+-$EXP_SUFFIX}"
+    EXP_NAME="train-q35a3b-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}${EXP_SUFFIX:+-$EXP_SUFFIX}"
 else
     EXP_NAME="${MODE}-${TAG}${EXP_SUFFIX:+-$EXP_SUFFIX}"
 fi
@@ -211,8 +253,24 @@ if [ "$MODE" = train ] && [ "${DRYRUN:-0}" != 1 ]; then
     [ "${SUBMIT:-1}" = 1 ] && mkdir -p "$RUN_DIR" && echo "$LAYOUT" > "$RUN_DIR/layout"
 fi
 
+################ Snapshot of this repository's runtime files ################
+# Jobs run train/, tools/, conf/ and patches/ from a content-addressed copy made at submission,
+# never from the working tree: queued and resubmitted jobs run what was submitted, and editing a
+# script cannot hit a running job (bash reads a script while executing it; an in-place edit of
+# train/rank_wrapper.sh once made a running job start its training a second time).
+SRC_FILES=$(cd "$WORKDIR" && find train tools conf patches -type f ! -name '*.pyc' ! -path '*/__pycache__/*' | LC_ALL=C sort)
+SRC=$MBCSCS_IOPS/code/src-$(cd "$WORKDIR" && echo "$SRC_FILES" | xargs sha256sum | sha256sum | cut -c1-12)
+if [ ! -d "$SRC" ]; then
+    mkdir -p "$MBCSCS_IOPS/code"
+    SRC_TMP=$(mktemp -d "$MBCSCS_IOPS/code/.src-tmp-XXXXXX")
+    (cd "$WORKDIR" && echo "$SRC_FILES" | tar -c -T -) | tar -x -C "$SRC_TMP"
+    find "$SRC_TMP" -type f -exec chmod a-w {} +   # accidental edits fail loudly
+    chmod 755 "$SRC_TMP"
+    mv -T "$SRC_TMP" "$SRC" 2>/dev/null || rm -rf "$SRC_TMP"   # another launch made it first
+fi
+
 TRAIN_ARGS=(--recipe "${RECIPE:-qwen35_text_35b_a3b_pretrain_8gpu_gb200_bf16_config}"
-            --profile "$WORKDIR/conf/qwen35_35b_a3b_gh200.yaml")
+            --profile "$SRC/conf/qwen35_35b_a3b_gh200.yaml")
 [ -n "${BLEND:-}" ] && TRAIN_ARGS+=(--blend "$BLEND")
 [ "${DRYRUN:-0}" = 1 ] && TRAIN_ARGS+=(--dry-run)
 for o in "${OVERRIDES[@]}"; do TRAIN_ARGS+=("${o//RUN_DIR/$RUN_DIR}"); done
@@ -244,6 +302,7 @@ cat <<EOF
 
 ################ Settings ################
 WORKDIR=$(printf %q "$WORKDIR")
+SRC=$(printf %q "$SRC")
 SCRIPT_PATH=$(printf %q "$SCRIPT")
 MODE=$MODE
 EXP_NAME=$EXP_NAME
@@ -265,6 +324,7 @@ SUMMARIZE=$SUMMARIZE
 RESUBMIT=$RESUBMIT
 MAX_RESUBMITS=$MAX_RESUBMITS
 TRAIN_ITERS=$STEPS
+BATCH_SCHEDULE=$BATCH_SCHEDULE
 WANDB_PROJECT=$(printf %q "${WANDB_PROJECT:-}")
 WANDB_ENTITY=$(printf %q "${WANDB_ENTITY:-}")
 WANDB_MODE=$(printf %q "${WANDB_MODE:-}")
@@ -280,6 +340,7 @@ bash -n "$SCRIPT"
 
 echo "Generated: $SCRIPT"
 echo "  run dir: $RUN_DIR"
+echo "  scripts: $SRC"
 echo "  layout : nodes=$NODES world=$WORLD TP=$TP PP=$PP CP=$CP EP=$EP DP=$DP MBS=$MBS GBS=$GBS seq=$SEQ_LEN"
 echo "  logging: NETLOG=$NETLOG NSYS=$NSYS W&B=$([ -n "${WANDB_API_KEY:-}" ] && echo "on${WANDB_MODE:+ ($WANDB_MODE)}" || { [ "${WANDB_MODE:-}" = offline ] && echo "offline (no key)" || echo off; })"
 if [ "${SUBMIT:-1}" = 1 ]; then

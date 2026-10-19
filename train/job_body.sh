@@ -11,7 +11,11 @@ echo "mode=$MODE  exp=$EXP_NAME  resubmit=$RESUBMIT_COUNT/$MAX_RESUBMITS"
 NETLOG_DIR=$RUN_DIR/netlogs/job_$SLURM_JOB_ID
 NSYS_DIR=$RUN_DIR/nsys/job_$SLURM_JOB_ID
 mkdir -p "$RUN_DIR"/{logs,tensorboard,wandb} "$NETLOG_DIR" "$CACHE_ROOT" "$CODE_ROOT"
-cp "$SCRIPT_PATH" "$RUN_DIR/logs/" 2>/dev/null || true
+# This very script (Slurm's copy, not logs/<job>.sbatch which a later launch.sh may regenerate):
+# resubmissions run exactly what was submitted.
+SELF=$RUN_DIR/logs/sbatch-$SLURM_JOB_ID.sh
+cp "$0" "$SELF" 2>/dev/null || SELF=$SCRIPT_PATH
+echo "scripts: $SRC"
 if [ "$MODE" = smoke ] && [ -d "$RUN_DIR/checkpoints" ]; then
     # Smoke checkpoints are disposable; dist-checkpointing refuses to write into an existing iter dir.
     echo "smoke: removing previous smoke checkpoints in $RUN_DIR/checkpoints"
@@ -21,7 +25,7 @@ fi
 ########## Code snapshot: pinned Megatron-Bridge + Megatron-LM + patches/ ##########
 # Content-addressed and shared by all jobs with the same code; the user's submodule
 # working trees are never touched. Mounted at /opt/Megatron-Bridge in the container.
-PATCH_HASH=$(cat "$WORKDIR"/patches/megatron-bridge/*.patch "$WORKDIR"/patches/megatron-lm/*.patch 2>/dev/null \
+PATCH_HASH=$(cat "$SRC"/patches/megatron-bridge/*.patch "$SRC"/patches/megatron-lm/*.patch 2>/dev/null \
     | sha256sum | cut -c1-12)
 CODE_ID=mb-${MBRIDGE_COMMIT:0:10}_mlm-${MLM_COMMIT:0:10}_p-$PATCH_HASH
 SNAP=$CODE_ROOT/$CODE_ID
@@ -37,7 +41,7 @@ echo "code snapshot: $SNAP"
         git -C "$WORKDIR/Megatron-Bridge" archive "$MBRIDGE_COMMIT" | tar -x -C "$TMP"
         git -C "$WORKDIR/Megatron-Bridge/3rdparty/Megatron-LM" archive "$MLM_COMMIT" | tar -x -C "$TMP/3rdparty/Megatron-LM"
         for target in megatron-bridge:. megatron-lm:3rdparty/Megatron-LM; do
-            for p in "$WORKDIR/patches/${target%%:*}"/*.patch; do
+            for p in "$SRC/patches/${target%%:*}"/*.patch; do
                 [ -e "$p" ] || continue
                 echo "  apply ${target%%:*}/$(basename "$p")"
                 (cd "$TMP/${target#*:}" && git apply --whitespace=nowarn "$p")
@@ -67,10 +71,13 @@ EOF
 SRUN_FLAGS=(--mpi=pmix --network=disable_rdzv_get --environment="$EDF")
 
 ########## Runtime environment ##########
-export WORKDIR NETLOG NETLOG_DIR NETMON_INTERVAL NETMON_NVLINK_EVERY NSYS NSYS_RANKS NSYS_DIR NSYS_TRACE
+export WORKDIR SRC NETLOG NETLOG_DIR NETMON_INTERVAL NETMON_NVLINK_EVERY NSYS NSYS_RANKS NSYS_DIR NSYS_TRACE
 export HF_HOME HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
 # JIT caches on node-local tmpfs: no cross-node races on Lustre, no stale entries.
 export TRITON_CACHE_DIR=/tmp/$USER/triton TORCHINDUCTOR_CACHE_DIR=/tmp/$USER/inductor
+# Also keep Triton autotuning results there (Gated DeltaNet kernels): a training process restarted
+# in the same job (batch-size steps) does not re-benchmark every config.
+export TRITON_CACHE_AUTOTUNING=1
 export TORCH_EXTENSIONS_DIR=/tmp/$USER/torch_extensions XDG_CACHE_HOME=/tmp/$USER/xdg
 # Megatron-Bridge's COMMON_RECIPE_ENV_VARS (used by its benchmark recipes).
 export NCCL_GRAPH_REGISTER=0 NCCL_NVLS_ENABLE=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
@@ -159,9 +166,9 @@ if [ "$PRE_RC" -ne 0 ]; then
     if [ -n "$BAD" ]; then
         echo "ERROR: unusable node(s): $BAD"
         if [ "$RESUBMIT" = true ] && [ "$RESUBMIT_COUNT" -lt "$MAX_RESUBMITS" ]; then
-            sbatch --chdir="$WORKDIR" --exclude="$BAD" --export=ALL,RESUBMIT_COUNT=$((RESUBMIT_COUNT + 1)) "$SCRIPT_PATH"
+            sbatch --chdir="$WORKDIR" --exclude="$BAD" --export=ALL,RESUBMIT_COUNT=$((RESUBMIT_COUNT + 1)) "$SELF"
         else
-            echo "resubmit by hand: sbatch --exclude=$BAD $SCRIPT_PATH"
+            echo "resubmit by hand: sbatch --exclude=$BAD $SELF"
         fi
     else
         echo "ERROR: pre-step failed (container / code snapshot)"
@@ -170,17 +177,49 @@ if [ "$PRE_RC" -ne 0 ]; then
 fi
 
 ########## Training ##########
-TRAIN_CMD=(python "$WORKDIR/train/pretrain.py" "${TRAIN_ARGS[@]}")
-printf 'CMD:'; printf ' %q' "${TRAIN_CMD[@]}"; echo
-srun -l -u "${SRUN_FLAGS[@]}" --cpus-per-task="$SLURM_CPUS_PER_TASK" --kill-on-bad-exit=1 --wait=120 \
-    bash "$WORKDIR/train/rank_wrapper.sh" "${TRAIN_CMD[@]}"
-SRUN_RC=$?
-echo "END $(date)  srun exit code: $SRUN_RC"
+time_left_mins() {  # minutes left in this allocation (squeue %L is [D-]HH:MM:SS or MM:SS)
+    local left d=0 h=0 m=0 parts
+    left=$(squeue -h -j "$SLURM_JOB_ID" -o %L 2>/dev/null | head -1)
+    [[ $left == *-* ]] && { d=${left%%-*}; left=${left#*-}; }
+    IFS=: read -r -a parts <<< "$left"
+    case ${#parts[@]} in
+        3) h=${parts[0]}; m=${parts[1]} ;;
+        2) m=${parts[0]} ;;
+        *) echo 0; return ;;
+    esac
+    echo $(( (10#$d * 24 + 10#$h) * 60 + 10#$m ))
+}
+TRAIN_CMD=(python "$SRC/train/pretrain.py" "${TRAIN_ARGS[@]}")
+# With a global-batch-size schedule the training process ends at every batch-size step, after a
+# checkpoint (BatchSizeStepCallback in train/pretrain.py), and is started again here in the same
+# allocation: it resumes with the new microbatch count and captures its CUDA graphs for it.
+BATCH_STEP_MARKER=$RUN_DIR/logs/batch-step-$SLURM_JOB_ID.json
+[ "${BATCH_SCHEDULE:-0}" = 1 ] && TRAIN_CMD+=(--batch-step-marker "$BATCH_STEP_MARKER")
+while true; do
+    rm -f "$BATCH_STEP_MARKER"
+    printf 'CMD:'; printf ' %q' "${TRAIN_CMD[@]}"; echo
+    srun -l -u "${SRUN_FLAGS[@]}" --cpus-per-task="$SLURM_CPUS_PER_TASK" --kill-on-bad-exit=1 --wait=120 \
+        bash "$SRC/train/rank_wrapper.sh" "${TRAIN_CMD[@]}"
+    SRUN_RC=$?
+    echo "END $(date)  srun exit code: $SRUN_RC"
+    { [ "$SRUN_RC" -eq 0 ] && [ -s "$BATCH_STEP_MARKER" ]; } || break
+    LEFT=$(time_left_mins)
+    echo "[batch-size step] $(tr -d '\n' < "$BATCH_STEP_MARKER"); ${LEFT} min left in this job"
+    # Restart needs ~5 min to start plus the 15 min exit margin; otherwise the next job continues.
+    if [ "$LEFT" -lt 25 ]; then
+        echo "[batch-size step] too little time left in this job; $([ "$RESUBMIT" = true ] \
+            && echo "the resubmitted job continues" || echo "continue with a new job (checkpoint saved)")"
+        break
+    fi
+    # The new process measures its own run time: stop it before this job's wall time too.
+    NEXT=(); for a in "${TRAIN_CMD[@]}"; do [[ $a == train.exit_duration_in_mins=* ]] || NEXT+=("$a"); done
+    TRAIN_CMD=("${NEXT[@]}" "train.exit_duration_in_mins=$((LEFT - 15))")
+done
 
 ########## Network logs: compress + summarize ##########
 if [ "$NETLOG" -ge 1 ]; then
     if [ "$SUMMARIZE" = 1 ]; then
-        srun -N1 -n1 "${SRUN_FLAGS[@]}" python "$WORKDIR/tools/summarize_netlogs.py" "$NETLOG_DIR" || true
+        srun -N1 -n1 "${SRUN_FLAGS[@]}" python "$SRC/tools/summarize_netlogs.py" "$NETLOG_DIR" || true
     fi
     if [ -d "$NETLOG_DIR/nccl-inspector" ]; then
         du -sh "$NETLOG_DIR/nccl-inspector" 2>/dev/null
@@ -202,7 +241,7 @@ if [ "$RESUBMIT" = true ] && [ "$SRUN_RC" -eq 0 ]; then
     elif [ "$LATEST" -eq 0 ]; then
         echo "[resubmit] no checkpoint written by this job, not resubmitting"
     else
-        sbatch --chdir="$WORKDIR" --export=ALL,RESUBMIT_COUNT=$NEXT "$SCRIPT_PATH"
+        sbatch --chdir="$WORKDIR" --export=ALL,RESUBMIT_COUNT=$NEXT "$SELF"
     fi
 fi
 exit $SRUN_RC

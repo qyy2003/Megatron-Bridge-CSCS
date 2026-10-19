@@ -1,0 +1,43 @@
+# Patch: do not report a planned stop of training as a failure
+#
+# Problem:   on an exit condition (train.exit_duration_in_mins at the end of every 12 h job,
+#            train.exit_interval, a signal) train() saves a checkpoint and calls sys.exit(0);
+#            _pretrain() catches it as BaseException and every rank logs
+#            "Pretrain failed on rank=N with SystemExit: 0 ... aborting ..." with a traceback,
+#            which buries real failures (exit code and cleanup are correct).
+# What:      training/pretrain.py _pretrain: for SystemExit with code 0/None log one info line
+#            instead; the cleanup and the re-raise are unchanged.
+# Porting:   the "Pretrain failed on rank" logger.exception in _pretrain's except block.
+#            Drop when upstream distinguishes planned exits.
+#
+# Applied to: Megatron-Bridge v0.6.2
+diff --git a/src/megatron/bridge/training/pretrain.py b/src/megatron/bridge/training/pretrain.py
+index 7c950d625..e921b34ac 100644
+--- a/src/megatron/bridge/training/pretrain.py
++++ b/src/megatron/bridge/training/pretrain.py
+@@ -199,13 +199,18 @@ def _pretrain(
+         _finish_train(state, checkpoint_manager)
+     except BaseException as error:
+         if inprocess_call_wrapper is None:
+-            logger.exception(
+-                "Pretrain failed on rank=%s with %s: %s. Bridge is aborting framework-owned distributed resources "
+-                "because peer ranks may be blocked in collectives.",
+-                _safe_distributed_rank(),
+-                type(error).__name__,
+-                error,
+-            )
++            if isinstance(error, SystemExit) and error.code in (0, None):
++                # train() ends with sys.exit(0) after an exit condition (exit_duration_in_mins,
++                # exit_interval, signal), once its checkpoint is saved: a planned stop.
++                logger.info("Pretrain stopped on rank=%s (exit condition reached)", _safe_distributed_rank())
++            else:
++                logger.exception(
++                    "Pretrain failed on rank=%s with %s: %s. Bridge is aborting framework-owned distributed "
++                    "resources because peer ranks may be blocked in collectives.",
++                    _safe_distributed_rank(),
++                    type(error).__name__,
++                    error,
++                )
+             try:
+                 _cleanup_after_pretrain_failure(state, should_destroy_process_group)
+             except BaseException:

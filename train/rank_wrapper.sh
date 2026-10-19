@@ -19,7 +19,7 @@ R=${SLURM_PROCID:?not launched by srun}
 NETMON_PID=
 if [ "$L" = 0 ] && [ "${NETLOG:-0}" -ge 1 ]; then
     mkdir -p "$NETLOG_DIR/netmon"
-    python3 "$WORKDIR/tools/netmon.py" \
+    python3 "${SRC:-$WORKDIR}/tools/netmon.py" \
         --out "$NETLOG_DIR/netmon/$(hostname).jsonl" \
         --interval "${NETMON_INTERVAL:-1}" --nvlink-every "${NETMON_NVLINK_EVERY:-5}" &
     NETMON_PID=$!
@@ -34,7 +34,7 @@ if [ "${NSYS:-0}" = 1 ] && [[ ",${NSYS_RANKS:-0}," == *",$R,"* ]]; then
         --cuda-graph-trace=node
         --sample=none --cpuctxsw=none
         --force-overwrite=true
-        --output="$NSYS_DIR/rank${R}_$(hostname)_${SLURM_JOB_ID}"
+        --output="$NSYS_DIR/rank${R}_$(hostname)_${SLURM_JOB_ID}.${SLURM_STEP_ID:-0}"
         "${CMD[@]}")
 fi
 

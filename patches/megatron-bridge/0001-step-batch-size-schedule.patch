@@ -1,0 +1,95 @@
+# Patch: support Megatron-Core's step_batch_size_schedule (global batch size ramp-up)
+#
+# Problem:   Megatron-Core a0f793d ignores the deprecated train.rampup_batch_size (it only logs
+#            "rampup_batch_size is deprecated ... Use step_batch_size_schedule instead"), and
+#            Bridge never passes train.step_batch_size_schedule to
+#            init_num_microbatches_calculator, so both silently train at a constant batch size.
+#            Bridge's throughput/* metrics also use the nominal train.global_batch_size, which
+#            overstates tokens/s while the batch is still smaller.
+# What:      training/initialize.py: pass step_batch_size_schedule, with seq_length so the
+#            thresholds are tokens ("0:512 25B:1024 ...").
+#            training/config.py TrainingConfig.finalize: reject rampup_batch_size; with a schedule
+#            require iteration-based training and global_batch_size == last batch size of the
+#            schedule (Bridge sizes the dataset and the LR scheduler steps with it).
+#            training/utils/train_utils.py get_throughput_metrics: use the current batch size.
+# Porting:   search for "init_num_microbatches_calculator(" in training/initialize.py and
+#            "history_samples" in training/utils/train_utils.py. Drop when upstream Bridge passes
+#            the schedule (not the case on main as of 2026-10-19).
+#
+# Applied to: Megatron-Bridge v0.6.2
+diff --git a/src/megatron/bridge/training/config.py b/src/megatron/bridge/training/config.py
+index 3e4447262..a23e0bae1 100644
+--- a/src/megatron/bridge/training/config.py
++++ b/src/megatron/bridge/training/config.py
+@@ -479,6 +479,24 @@ class TrainingConfig(MTrainTrainingConfig):
+ 
+         assert num_training_modes > 0, "One of train_iters, train_samples, or num_epochs must be provided"
+         assert num_training_modes == 1, "Cannot specify more than one of train_iters, train_samples, or num_epochs"
++        # Megatron-Core ignores rampup_batch_size (deprecated); fail instead of training at a constant size.
++        assert self.rampup_batch_size is None, (
++            "rampup_batch_size is ignored by Megatron-Core; use step_batch_size_schedule instead"
++        )
++        if self.step_batch_size_schedule is not None:
++            from megatron.core.num_microbatches_calculator import StepBatchsizeNumMicroBatchesCalculator
++
++            assert has_train_iters and not self._train_iters_from_num_epochs, (
++                "step_batch_size_schedule needs iteration-based training (train_iters)"
++            )
++            final_batch_size = StepBatchsizeNumMicroBatchesCalculator._parse_schedule(
++                self.step_batch_size_schedule, seq_length=None
++            )[-1][1]
++            # global_batch_size stays the nominal (final) size: data and LR-scheduler sizing use it.
++            assert self.global_batch_size == final_batch_size, (
++                f"global_batch_size ({self.global_batch_size}) must equal the last batch size of "
++                f"step_batch_size_schedule ({final_batch_size})"
++            )
+         if has_num_epochs:
+             assert self.num_epochs > 0, "num_epochs must be a positive number"
+             assert self.rampup_batch_size is None, "Batch size rampup not supported with epoch-based training"
+diff --git a/src/megatron/bridge/training/initialize.py b/src/megatron/bridge/training/initialize.py
+index b55e9d13b..89a6d343f 100644
+--- a/src/megatron/bridge/training/initialize.py
++++ b/src/megatron/bridge/training/initialize.py
+@@ -119,6 +119,9 @@ def initialize_megatron(
+         train_config.micro_batch_size,
+         cfg.data_parallel_size,
+         train_config.decrease_batch_size_if_needed,
++        step_batch_size_schedule=train_config.step_batch_size_schedule,
++        # Schedule thresholds are tokens ("0:512 25B:1024 ..."), converted to samples.
++        seq_length=model_config.seq_length if train_config.step_batch_size_schedule else None,
+     )
+ 
+     # init rerun global state
+diff --git a/src/megatron/bridge/training/utils/train_utils.py b/src/megatron/bridge/training/utils/train_utils.py
+index d4a4518f4..52a39bd12 100644
+--- a/src/megatron/bridge/training/utils/train_utils.py
++++ b/src/megatron/bridge/training/utils/train_utils.py
+@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
+ import torch
+ import torch.nn as nn
+ from megatron.core import tensor_parallel
+-from megatron.core.num_microbatches_calculator import get_num_microbatches
++from megatron.core.num_microbatches_calculator import get_current_global_batch_size, get_num_microbatches
+ from megatron.core.tensor_parallel import param_is_not_tensor_parallel_duplicate
+ from megatron.core.transformer.module import MegatronModule
+ from megatron.core.transformer.moe.moe_utils import track_moe_metrics
+@@ -1450,7 +1450,9 @@ def report_throughput(
+     """
+     if len(history_wct) >= window_size:
+         history_iters = [i for i in range(iteration - window_size + 1, iteration + 1)]
+-        history_samples = [i * train_config.global_batch_size for i in history_iters]
++        # Current (not nominal) batch size: they differ during a step_batch_size_schedule ramp.
++        global_batch_size = get_current_global_batch_size()
++        history_samples = [i * global_batch_size for i in history_iters]
+         history_tokens = [i * seq_length for i in history_samples]
+         world_size = get_world_size_safe()
+         elapsed_batches = len(history_samples) - 1
+@@ -1477,7 +1479,7 @@ def report_throughput(
+             "throughput/device/batches_per_sec": dev_batches_per_sec,
+             "throughput/device/samples_per_sec": dev_samples_per_sec,
+             "throughput/micro_batch_size": train_config.micro_batch_size,
+-            "throughput/global_batch_size": train_config.global_batch_size,
++            "throughput/global_batch_size": global_batch_size,
+         }
+         if elapsed_tokens > 0:
+             tokens_per_sec = elapsed_tokens / elapsed_wct

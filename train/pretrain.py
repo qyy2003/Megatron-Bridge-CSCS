@@ -46,6 +46,8 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
     parser.add_argument("--nsys-steps", help="START:END global steps captured by nsys (needs the nsys wrapper).")
     parser.add_argument("--nsys-ranks", default="0", help="Comma-separated global ranks run under nsys.")
     parser.add_argument("--net-log-dir", help="Write per-step timestamps + NIC byte deltas here (per node).")
+    parser.add_argument("--batch-step-marker", help="With train.step_batch_size_schedule: stop before each "
+                        "batch-size step and write this file (the job restarts training, see BatchSizeStepCallback).")
     parser.add_argument("--dry-run", action="store_true", help="Resolve and print the config, then exit.")
     args, rest = parser.parse_known_args(argv)
     overrides = []
@@ -226,6 +228,45 @@ class NetTrafficCallback:
             )
 
 
+class BatchSizeStepCallback:
+    """End the run cleanly at the last iteration before each step of the batch-size schedule.
+
+    With PP > 1 the TE-scoped CUDA graphs are captured once per microbatch slot, in the 1F1B
+    order of the microbatch count at capture time, and share input/output buffers according
+    to that order; replaying them for more microbatches is not safe. So instead of growing the
+    batch in-process, this sets ``train.exit_interval`` to the current iteration: Bridge saves
+    a checkpoint and returns normally, rank 0 writes ``marker``, and ``train/job_body.sh``
+    starts training again in the same allocation. The new process loads the checkpoint, takes
+    the new batch size from ``consumed_train_samples`` and captures its graphs for it.
+    """
+
+    def __init__(self, marker: str) -> None:
+        from megatron.bridge.utils.common_utils import get_rank_safe
+
+        self.marker = marker
+        self.rank = get_rank_safe()
+
+    def on_train_step_end(self, context) -> None:
+        from megatron.core import num_microbatches_calculator as nmc
+
+        calc = nmc._GLOBAL_NUM_MICROBATCHES_CALCULATOR
+        if not isinstance(calc, nmc.StepBatchsizeNumMicroBatchesCalculator):
+            return
+        train_cfg, ts = context.state.cfg.train, context.state.train_state
+        # Bridge advances step and consumed_train_samples after this callback.
+        current = calc.get_current_global_batch_size()
+        upcoming = calc._get_batch_size_for_samples(ts.consumed_train_samples + current)
+        if upcoming == current or ts.step + 1 >= train_cfg.train_iters:
+            return
+        train_cfg.exit_interval = ts.step + 1
+        if self.rank == 0:
+            info = {"iteration": ts.step + 1, "consumed_samples": ts.consumed_train_samples + current,
+                    "global_batch_size": current, "next_global_batch_size": upcoming}
+            Path(self.marker).write_text(json.dumps(info) + "\n")
+            logger.info("global batch size %d -> %d after iteration %d: checkpoint, exit, restart",
+                        current, upcoming, ts.step + 1)
+
+
 def main(argv: list[str] | None = None) -> None:
     """Build the config and run pretraining."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
@@ -252,6 +293,10 @@ def main(argv: list[str] | None = None) -> None:
         net = NetTrafficCallback(args.net_log_dir)
         callbacks.register("on_train_step_start", net.on_train_step_start)
         callbacks.register("on_train_step_end", net.on_train_step_end)
+    if args.batch_step_marker and cfg.train.step_batch_size_schedule:
+        if not (cfg.checkpoint.save and cfg.checkpoint.load):
+            raise SystemExit("--batch-step-marker needs checkpoint.save and checkpoint.load (the restart resumes)")
+        callbacks.register("on_train_step_end", BatchSizeStepCallback(args.batch_step_marker).on_train_step_end)
 
     pretrain(cfg, forward_step, callbacks=callbacks)
 
