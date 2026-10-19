@@ -1,0 +1,3 @@
+[submodule "Megatron-Bridge"]
+	path = Megatron-Bridge
+	url = https://github.com/NVIDIA-NeMo/Megatron-Bridge.git

@@ -1,0 +1,53 @@
+# Clariden (CSCS Alps, 4x GH200 per node, Slingshot-11) profile for the official recipe
+#   megatron.bridge.recipes.qwen35_text_35b_a3b_pretrain_8gpu_gb200_bf16_config
+#
+# Merged onto the recipe by train/pretrain.py before the launcher's KEY=VALUE overrides.
+# Only *platform* deviations live here; anything not listed keeps the recipe value.
+# Parallel sizes, batch sizes, precision of the gradient reduction and CUDA graphs are
+# per-run choices made in launch.sh (LAYOUT presets), because they depend on node count.
+
+model:
+  # GB200 NVL72 uses the HybridEP flex dispatcher (NVLink-domain aware). Its cross-node
+  # path, like DeepEP's, needs InfiniBand GPU-initiated RDMA, which Slingshot (libfabric/CXI)
+  # does not provide; the standard NCCL all-to-all dispatcher is the portable choice
+  # (moe_preprocess CUDA graphs remain supported with it for dropless routing).
+  # With the expert group inside one node (EP*ETP <= 4) HybridEP's NVLink path works on
+  # GH200 too: launch.sh DISPATCHER=hybridep overrides these two keys.
+  moe_token_dispatcher_type: alltoall
+  moe_flex_dispatcher_backend: null
+
+comm_overlap:
+  # TP=1, so TE userbuffers TP overlap is meaningless (Bridge would disable it with a warning).
+  tp_comm_overlap: false
+  # On GB200 EP=8 fits inside one NVLink domain and the recipe turns DP overlap off. Here the
+  # data-parallel reduce-scatter / all-gather crosses Slingshot, so overlap it with compute.
+  # (These values are applied over ddp.* at setup, so they are the ones that matter.)
+  overlap_grad_reduce: true
+  overlap_param_gather: true
+
+ddp:
+  overlap_grad_reduce: true
+  overlap_param_gather: true
+
+dataset:
+  # ~1000+ blend prefixes: build the per-prefix sample indices in parallel the first time
+  # (cached under dataset.path_to_cache afterwards). Does not change which samples are drawn.
+  num_dataset_builder_threads: 8
+
+dist:
+  # First steps include TE/Triton JIT and CUDA-graph capture on every rank; on a busy
+  # Lustre the default 10 min NCCL timeout can be hit during the first collectives.
+  distributed_timeout_minutes: 30
+
+logger:
+  log_interval: 1
+  log_throughput: true
+  log_throughput_to_tensorboard: true
+  throughput_window_size: 10
+  log_timers_to_tensorboard: true
+  log_memory_to_tensorboard: true
+  log_params_norm: false
+
+checkpoint:
+  # Keep the last few checkpoints only (each is ~0.5 TB with fp32 optimizer state).
+  most_recent_k: 3

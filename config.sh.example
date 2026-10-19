@@ -1,0 +1,35 @@
+# Copy this file to config.sh and fill in your values:
+#   cp config.sh.example config.sh && $EDITOR config.sh && source config.sh
+# config.sh is git-ignored so personal paths and keys are never committed.
+
+# WORKDIR auto-derives from this file's location, so the repo works wherever cloned.
+export WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# SBATCH_ACCOUNT is read by sbatch/srun/salloc as the default --account.
+export SBATCH_ACCOUNT="prep23"
+
+# Weights & Biases. Leave WANDB_API_KEY empty to disable W&B (TensorBoard still runs).
+# The key is only ever read from the environment; generated sbatch files never contain it.
+export WANDB_API_KEY=""
+export WANDB_ENTITY=""                      # optional: team/user, empty = your default entity
+export WANDB_PROJECT="qwen35-35b-a3b-cscs"
+
+# ----------------------------------------------------------------------------
+# Storage (CSCS cleanup policies: files not accessed for 14 days on iopsstor and
+# 30 days on capstor/ritom scratch are deleted).
+#   - iopsstor (NVMe): tokenized training data (random reads)       -> DATA_ROOT
+#   - capstor  (HDD) : checkpoints, network logs, nsys, the image  -> RUN_ROOT, IMAGE_DIR
+# The tokenized data can always be regenerated from SOURCE_MIRROR (persistent store).
+# ----------------------------------------------------------------------------
+export MBCSCS_IOPS=/iopsstor/scratch/cscs/$USER/mbcscs
+export MBCSCS_CAP=/capstor/scratch/cscs/$USER/mbcscs
+
+export IMAGE_DIR=$MBCSCS_CAP/images         # squashfs built by env/build_image.sbatch
+export DATA_ROOT=$MBCSCS_IOPS/data          # tokenized Lightning blend (bin/idx + blend json)
+export RUN_ROOT=$MBCSCS_CAP/runs            # one directory per experiment
+export CACHE_ROOT=$MBCSCS_IOPS/cache        # dataset index cache, triton/inductor caches
+export HF_HOME=$MBCSCS_IOPS/hf_home         # Qwen3.5 config + tokenizer (prefetched, used offline)
+
+# Read-only Swiss AI mirror of the Nemotron pretraining datasets (verified byte-size
+# identical to Hugging Face for every subset of the Lightning open-data blend).
+export SOURCE_MIRROR=/capstor/store/cscs/swissai/infra01/datasets/nvidia

@@ -1,0 +1,7 @@
+logs/
+config.sh
+patches/*/1000-cache.patch
+# core dumps of crashed ranks (core_<node>_<pid>, written to the job's working directory)
+core*
+__pycache__/
+*.pyc

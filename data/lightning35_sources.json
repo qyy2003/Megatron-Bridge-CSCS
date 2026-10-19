@@ -1,0 +1,190 @@
+{
+  "_comment": "Nemotron 3.5 Lightning open-data pretraining blend, verbatim from NVIDIA-NeMo/Nemotron v0.2.0 src/nemotron/recipes/lightning35/stage0_pretrain/config/data_prep/data_blend_raw.json (23 sources, weight 1.0 each = uniform mixture over sources). 'mirror' is the subset directory relative to $SOURCE_MIRROR (Swiss AI copy on capstor, byte-size identical to Hugging Face).",
+  "nemotron_tag": "v0.2.0",
+  "sources": [
+    {
+      "name": "nemotron-math-3",
+      "hf": "nvidia/Nemotron-CC-Math-v1",
+      "subset": "3",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-Math-v1/snapshot/3"
+    },
+    {
+      "name": "nemotron-math-4plus",
+      "hf": "nvidia/Nemotron-CC-Math-v1",
+      "subset": "4plus",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-Math-v1/snapshot/4plus"
+    },
+    {
+      "name": "nemotron-math-4plus-mind",
+      "hf": "nvidia/Nemotron-CC-Math-v1",
+      "subset": "4plus_MIND",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-Math-v1/snapshot/4plus_MIND"
+    },
+    {
+      "name": "nemotron-cc-v2-diverse-qa",
+      "hf": "nvidia/Nemotron-CC-v2",
+      "subset": "Diverse-QA",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2/snapshot/Diverse-QA"
+    },
+    {
+      "name": "nemotron-cc-v2-high-quality",
+      "hf": "nvidia/Nemotron-CC-v2",
+      "subset": "High-Quality",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2/snapshot/High-Quality"
+    },
+    {
+      "name": "nemotron-cc-v2-high-quality-synthetic",
+      "hf": "nvidia/Nemotron-CC-v2",
+      "subset": "High-Quality-Synthetic",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2/snapshot/High-Quality-Synthetic"
+    },
+    {
+      "name": "nemotron-cc-v2-medium-high-quality",
+      "hf": "nvidia/Nemotron-CC-v2",
+      "subset": "Medium-High-Quality",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2/snapshot/Medium-High-Quality"
+    },
+    {
+      "name": "nemotron-cc-v2-medium-quality",
+      "hf": "nvidia/Nemotron-CC-v2",
+      "subset": "Medium-Quality",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2/snapshot/Medium-Quality"
+    },
+    {
+      "name": "nemotron-cc-v2-translated-diverse-qa",
+      "hf": "nvidia/Nemotron-CC-v2",
+      "subset": "Translated-Diverse-QA",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2/snapshot/Translated-Diverse-QA"
+    },
+    {
+      "name": "nemotron-cc-v2.1-high-quality",
+      "hf": "nvidia/Nemotron-CC-v2.1",
+      "subset": "High-Quality",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2.1/High-Quality"
+    },
+    {
+      "name": "nemotron-cc-v2.1-high-quality-synthetic",
+      "hf": "nvidia/Nemotron-CC-v2.1",
+      "subset": "High-Quality-Synthetic",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2.1/High-Quality-Synthetic"
+    },
+    {
+      "name": "nemotron-cc-v2.1-high-quality-translated-to-english",
+      "hf": "nvidia/Nemotron-CC-v2.1",
+      "subset": "High-Quality-Translated-To-English",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2.1/High-Quality-Translated-To-English"
+    },
+    {
+      "name": "nemotron-cc-v2.1-high-quality-translated-to-english-synthetic",
+      "hf": "nvidia/Nemotron-CC-v2.1",
+      "subset": "High-Quality-Translated-To-English-Synthetic",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2.1/High-Quality-Translated-To-English-Synthetic"
+    },
+    {
+      "name": "nemotron-cc-v2.1-medium-high-quality",
+      "hf": "nvidia/Nemotron-CC-v2.1",
+      "subset": "Medium-High-Quality",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2.1/Medium-High-Quality"
+    },
+    {
+      "name": "nemotron-cc-v2.1-medium-high-quality-synthetic",
+      "hf": "nvidia/Nemotron-CC-v2.1",
+      "subset": "Medium-High-Quality-Synthetic",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2.1/Medium-High-Quality-Synthetic"
+    },
+    {
+      "name": "nemotron-cc-v2.1-medium-high-quality-translated-to-english",
+      "hf": "nvidia/Nemotron-CC-v2.1",
+      "subset": "Medium-High-Quality-Translated-To-English",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2.1/Medium-High-Quality-Translated-To-English"
+    },
+    {
+      "name": "nemotron-cc-v2.1-medium-quality",
+      "hf": "nvidia/Nemotron-CC-v2.1",
+      "subset": "Medium-Quality",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-CC-v2.1/Medium-Quality"
+    },
+    {
+      "name": "nemotron-pretraining-infinibyte-reasoning",
+      "hf": "nvidia/Nemotron-Pretraining-Specialized-v1",
+      "subset": "Nemotron-Pretraining-InfiniByte-Reasoning",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-Pretraining-Specialized-v1/Nemotron-Pretraining-InfiniByte-Reasoning"
+    },
+    {
+      "name": "nemotron-pretraining-math-textbooks",
+      "hf": "nvidia/Nemotron-Pretraining-Specialized-v1",
+      "subset": "Nemotron-Pretraining-Math-Textbooks",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-Pretraining-Specialized-v1/Nemotron-Pretraining-Math-Textbooks"
+    },
+    {
+      "name": "nemotron-pretraining-rqa",
+      "hf": "nvidia/Nemotron-Pretraining-Specialized-v1",
+      "subset": "Nemotron-Pretraining-RQA",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-Pretraining-Specialized-v1/Nemotron-Pretraining-RQA"
+    },
+    {
+      "name": "nemotron-pretraining-stem-sft",
+      "hf": "nvidia/Nemotron-Pretraining-Specialized-v1",
+      "subset": "Nemotron-Pretraining-STEM-SFT",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-Pretraining-Specialized-v1/Nemotron-Pretraining-STEM-SFT"
+    },
+    {
+      "name": "nemotron-pretraining-scientific-coding",
+      "hf": "nvidia/Nemotron-Pretraining-Specialized-v1",
+      "subset": "Nemotron-Pretraining-Scientific-Coding",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-Pretraining-Specialized-v1/Nemotron-Pretraining-Scientific-Coding"
+    },
+    {
+      "name": "nemotron-pretraining-wiki-rewrite",
+      "hf": "nvidia/Nemotron-Pretraining-Specialized-v1",
+      "subset": "Nemotron-Pretraining-Wiki-Rewrite",
+      "text_field": "text",
+      "weight": 1.0,
+      "mirror": "Nemotron-Pretraining-Specialized-v1/Nemotron-Pretraining-Wiki-Rewrite"
+    }
+  ]
+}
