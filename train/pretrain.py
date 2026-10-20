@@ -119,6 +119,38 @@ def apply_blend(cfg, blend_path: str) -> None:
     logger.info("data blend %s: %d prefixes, split=%s", blend_path, n_prefixes, split)
 
 
+def widen_blend_surplus(cfg) -> None:
+    """Give the blended validation/test splits room for Megatron's per-prefix rounding.
+
+    Megatron builds every prefix's dataset with ``ceil(N * w) * (1 + mid_level_dataset_surplus)``
+    samples but sizes the blended split as ``sum_p ceil(N * w_p)``, i.e. up to one sample per
+    prefix more than N. With ~600-1100 prefixes and an evaluation split of a few thousand samples
+    the default surplus (0.005) is far too small and the build fails with "The test blend
+    oversamples the contributing datasets" (job 3702526). Allow one extra sample per prefix in
+    the smallest evaluation split, +25%.
+    """
+    ds, val = cfg.dataset, cfg.validation
+    if ds.blend is not None:
+        n_prefixes = len(ds.blend[0])
+    elif ds.blend_per_split is not None:
+        n_prefixes = max(len(b[0]) for b in ds.blend_per_split if b)
+    else:
+        return
+    gbs = val.eval_global_batch_size or cfg.train.global_batch_size
+    sizes = []
+    if val.eval_iters:
+        sizes.append(val.eval_iters * gbs)  # test split
+        if val.eval_interval:
+            sizes.append((cfg.train.train_iters // val.eval_interval + 1) * val.eval_iters * gbs)
+    if not sizes:
+        return
+    needed = 1.25 * n_prefixes / min(sizes)
+    if needed > ds.mid_level_dataset_surplus:
+        logger.info("dataset.mid_level_dataset_surplus %.4f -> %.4f (%d prefixes, smallest eval split %d samples)",
+                    ds.mid_level_dataset_surplus, needed, n_prefixes, min(sizes))
+        ds.mid_level_dataset_surplus = needed
+
+
 def build_config(args: argparse.Namespace, overrides: list[str]):
     """Recipe -> cluster profile -> data blend -> CLI overrides -> profiling."""
     from megatron.bridge.training.config import ProfilingConfig
@@ -143,6 +175,7 @@ def build_config(args: argparse.Namespace, overrides: list[str]):
     # The dataset owns the sequence length (same rule as scripts/training/run_recipe.py).
     if cfg.dataset.seq_length is not None and cfg.model.seq_length != cfg.dataset.seq_length:
         cfg.model.seq_length = cfg.dataset.seq_length
+    widen_blend_surplus(cfg)
 
     if args.nsys_steps:
         start, end = (int(x) for x in args.nsys_steps.split(":"))
@@ -153,6 +186,33 @@ def build_config(args: argparse.Namespace, overrides: list[str]):
             profile_ranks=[int(r) for r in args.nsys_ranks.split(",") if r != ""],
         )
     return cfg
+
+
+def _gpu_numa_nodes() -> tuple[str, ...]:
+    """CPU-less NUMA nodes with memory, in node order (= GPU order): the GPUs' HBM on GH200."""
+    global _GPU_NUMA_NODES
+    if _GPU_NUMA_NODES is None:
+        root, nodes = "/sys/devices/system/node", []
+        try:
+            names = sorted((n for n in os.listdir(root) if n.startswith("node") and n[4:].isdigit()),
+                           key=lambda n: int(n[4:]))
+        except OSError:
+            names = []
+        for n in names:
+            try:
+                with open(f"{root}/{n}/cpulist") as f:
+                    if f.read().strip():
+                        continue
+                with open(f"{root}/{n}/meminfo") as f:
+                    if any(len(p) >= 4 and p[2] == "MemTotal:" and int(p[3]) > 0 for p in map(str.split, f)):
+                        nodes.append(n)
+            except (OSError, ValueError):
+                pass
+        _GPU_NUMA_NODES = tuple(nodes)
+    return _GPU_NUMA_NODES
+
+
+_GPU_NUMA_NODES: tuple[str, ...] | None = None
 
 
 class NetTrafficCallback:
@@ -166,6 +226,8 @@ class NetTrafficCallback:
       throughput sits next to the loss curve.
 
     The counters are the NIC hardware totals (NCCL + Lustre + everything else on the node).
+    Each record also carries host memory: the node's MemAvailable / Shmem and this rank's
+    VmRSS / VmHWM (GB), to catch host-memory growth before the kernel OOM-kills a rank.
     """
 
     def __init__(self, log_dir: str) -> None:
@@ -195,6 +257,76 @@ class NetTrafficCallback:
             out[dev] = vals
         return out
 
+    @staticmethod
+    def _children_private_gb() -> dict[str, float]:
+        """Private dirty memory of this rank's child processes (dataloader workers, checkpoint
+        writers). Their per-prefix attention-mask caches once ran the nodes out of host memory
+        (see dataset.create_attention_mask in the profile); constant since that fix.
+        """
+        pids: set[str] = set()
+        try:
+            for tid in os.listdir("/proc/self/task"):
+                with open(f"/proc/self/task/{tid}/children") as f:
+                    pids.update(f.read().split())
+        except OSError:
+            return {}
+        kb = 0
+        for pid in pids:
+            try:
+                with open(f"/proc/{pid}/smaps_rollup") as f:
+                    for line in f:
+                        if line.startswith("Private_Dirty:"):
+                            kb += int(line.split()[1])
+            except OSError:
+                pass
+        return {"workers_private": round(kb / 1e6, 2), "workers": len(pids)}
+
+    @staticmethod
+    def _gpu_memory_gb() -> dict[str, float]:
+        """This rank's GPU memory (the W&B/TensorBoard memory metrics come from the last rank only;
+        with PP the first stage can be the fuller one)."""
+        import torch
+
+        if not torch.cuda.is_available():
+            return {}
+        return {
+            "gpu_reserved": round(torch.cuda.memory_reserved() / 1e9, 2),
+            "gpu_max_reserved": round(torch.cuda.max_memory_reserved() / 1e9, 2),
+            "gpu_max_allocated": round(torch.cuda.max_memory_allocated() / 1e9, 2),
+        }
+
+    @staticmethod
+    def _gpu_hbm_free_gb() -> dict[str, float]:
+        """Lowest free HBM over the node's GPUs. On GH200 each GPU's memory is a CPU-less NUMA
+        node (4/12/20/28) and CUDA allocations show up there as used memory, so this covers every
+        rank of the node, also the expert-parallel ranks that get the busiest experts (dropless
+        MoE: their activations grow with routing imbalance), unlike the counters above."""
+        free = []
+        for node in _gpu_numa_nodes():
+            try:
+                with open(f"/sys/devices/system/node/{node}/meminfo") as f:
+                    for line in f:
+                        parts = line.split()
+                        if len(parts) >= 4 and parts[2] == "MemFree:":
+                            free.append(int(parts[3]) / 1e6)  # kB -> GB
+            except OSError:
+                pass
+        return {"gpu_hbm_min_free": round(min(free), 2)} if free else {}
+
+    @staticmethod
+    def _host_memory_gb() -> dict[str, float]:
+        out: dict[str, float] = {}
+        for path, keys in (("/proc/meminfo", ("MemAvailable", "Shmem")), ("/proc/self/status", ("VmRSS", "VmHWM"))):
+            try:
+                with open(path) as f:
+                    for line in f:
+                        key, _, rest = line.partition(":")
+                        if key in keys:
+                            out[key] = round(int(rest.split()[0]) / 1e6, 2)  # kB -> GB
+            except OSError:
+                pass
+        return out
+
     def on_train_step_start(self, context) -> None:
         if not self.enabled:
             return
@@ -209,8 +341,10 @@ class NetTrafficCallback:
         c1 = self._counters()
         dt = max(t1 - self.t0, 1) / 1e9
         delta = {d: [b - a if a >= 0 and b >= 0 else None for a, b in zip(self.c0[d], c1[d])] for d in c1}
+        mem = {**self._host_memory_gb(), **self._children_private_gb(), **self._gpu_memory_gb(),
+               **self._gpu_hbm_free_gb()}
         if self.fh is not None:
-            rec = {"iter": self.step, "t0_ns": self.t0, "t1_ns": t1, "nic_tx_rx_bytes": delta}
+            rec = {"iter": self.step, "t0_ns": self.t0, "t1_ns": t1, "nic_tx_rx_bytes": delta, "host_mem_gb": mem}
             self.fh.write(json.dumps(rec) + "\n")
         wb = context.state.wandb_logger
         if wb is not None:
@@ -223,9 +357,37 @@ class NetTrafficCallback:
                     "net/node_tx_GBps": tx / 1e9 / dt,
                     "net/node_rx_GBps": rx / 1e9 / dt,
                     "net/step_wallclock_s": dt,
+                    **{f"node/{k}_GB" if k != "workers" else "node/workers": v for k, v in mem.items()},
                 },
                 step=self.step,
             )
+
+
+def freeze_gc(context=None) -> None:
+    """Move every object that exists before the dataloader workers fork into the permanent GC
+    generation, so the workers' garbage collector never touches (and copy-on-write copies) the
+    parent's heap: model, optimizer and checkpoint state."""
+    import gc
+
+    gc.collect()
+    gc.freeze()
+
+
+def trim_host_memory(context=None) -> None:
+    """Return freed heap memory to the OS (registered after the checkpoint load and every save).
+
+    Loading and saving a checkpoint stage tens of GB per rank in host memory, and glibc keeps the
+    freed arenas; with 4 ranks per node the host ran out of memory a few checkpoint operations
+    later (job 3703471: rank OOM-killed by the kernel).
+    """
+    import ctypes
+    import gc
+
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
 
 
 class BatchSizeStepCallback:
@@ -289,6 +451,10 @@ def main(argv: list[str] | None = None) -> None:
     from megatron.bridge.training.pretrain import pretrain
 
     callbacks = CallbackManager()
+    if os.environ.get("MBCSCS_NO_MALLOC_TRIM") != "1":  # only for A/B memory tests
+        callbacks.register("on_train_start", trim_host_memory)
+        callbacks.register("on_checkpoint_save", trim_host_memory)
+        callbacks.register("on_data_init_start", freeze_gc)
     if args.net_log_dir:
         net = NetTrafficCallback(args.net_log_dir)
         callbacks.register("on_train_step_start", net.on_train_step_start)

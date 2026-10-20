@@ -27,7 +27,15 @@
 # Knobs (environment variables, [default]):
 #   EP [4] TP [1] PP [2] CP [1] ETP [1]   parallel sizes; EP=4 keeps the expert all-to-all
 #                                         inside a node (NVLink), only DP/PP traffic crosses Slingshot;
-#                                         PP=2 halves the static memory (PP=1 does not fit, WORKLOG.md)
+#                                         PP=2 halves the static memory (PP=1 does not fit, WORKLOG.md).
+#                                         A train run may continue on another node count (data-parallel
+#                                         size); the layout itself is fixed once checkpoints exist
+#   VPP [none]          virtual pipeline stages per PP rank (interleaved 1F1B: bubble / VPP)
+#   PP_LAYOUT [PP=2: Et*21|t*19mL]  uneven pipeline split (Megatron layout string: E embedding,
+#                       t layer, m MTP, L loss, stages split by |, PP*VPP stages); the last stage also
+#                       carries both 248k-vocab output heads and the MTP layer. "" = even split
+#   EP_OVERLAP [0]      1 = overlap the MoE dispatch/combine of one microbatch with another's compute
+#                       (comm_overlap.overlap_moe_expert_parallel_comm; needs VPP when PP > 1)
 #   MBS [1] GBS [512] SEQ_LEN [4096]      micro/global batch, sequence length (recipe values)
 #   GBS_RAMP [train: 512:2560:4:3%, else none]   START:FINAL:STEPS:LENGTH: the global batch grows
 #                       from START to FINAL sequences in STEPS equal steps over the first LENGTH
@@ -49,8 +57,15 @@
 #   NETLOG [2]          0 off | 1 NIC + NVLink counters and per-step W&B net metrics
 #                       | 2 + NCCL inspector, every collective and P2P op | 3 + per-op timestamps
 #   NSYS [0]            1 = raw nsys timeline of NSYS_STEPS [10:12] on NSYS_RANKS [0]
-#   SAVE_INTERVAL [500] EVAL_INTERVAL [500] EVAL_ITERS [32]
-#   WALLTIME PARTITION MAX_RESUBMITS [50] EXP_SUFFIX
+#   SAVE_INTERVAL [train: 100]  checkpoint every N steps (~77 min at GBS 2560 on 8 nodes; a save blocks
+#                       ~25-105 s, median ~50 s). Jobs on Clariden get killed by node failures every few
+#                       hours to days, and all steps since the last checkpoint are lost (WORKLOG.md)
+#   EVAL_INTERVAL [500] EVAL_ITERS [16]
+#   EXCLUDE_FLAKY [1]   1 = submit (and resubmit) with --exclude= the nodes that recently dropped out
+#                       of Slurm ("Not responding", which kills the job): tools/flaky_nodes.sh
+#   CRASH_RETRIES [2]   train mode: after a crashed job (NCCL timeout, GPU error, ...) resubmit from the last
+#                       checkpoint, at most this many times without a new checkpoint in between
+#   WALLTIME PARTITION MAX_RESUBMITS [200] EXP_SUFFIX
 #   EXTRA               more KEY=VALUE overrides, e.g. EXTRA="optimizer.weight_decay=0.05"
 set -euo pipefail
 
@@ -62,6 +77,10 @@ source "$WORKDIR/env/versions.env"
 USAGE="Usage: ./launch.sh <smoke|throughput|train> [nodes] [steps]"
 MODE=${1:?$USAGE}
 
+model_layers() {  # transformer layers of this run (the smoke model has 4)
+    if [ "$MODE" = smoke ]; then echo 4; else echo 40; fi
+}
+
 hms_to_mins() {
     local h m s
     IFS=: read -r h m s <<< "$1"
@@ -72,9 +91,19 @@ EP=${EP:-4}; TP=${TP:-1}; PP=${PP:-2}; CP=${CP:-1}; ETP=${ETP:-1}
 MBS=${MBS:-1}; SEQ_LEN=${SEQ_LEN:-4096}
 GRAD_FP32=${GRAD_FP32:-0}; CUDA_GRAPHS=${CUDA_GRAPHS:-1}; RECOMPUTE=${RECOMPUTE:-none}
 DISPATCHER=${DISPATCHER:-auto}
+EXCLUDE_FLAKY=${EXCLUDE_FLAKY:-1}
+VPP=${VPP:-}; EP_OVERLAP=${EP_OVERLAP:-0}
+# Default uneven split for PP=2: the last stage also runs both 248k-vocab output heads and the MTP
+# layer. On real data 21/19 is as fast as 23/17 (the mock-data optimum, which assumes balanced
+# expert routing) and leaves the fullest GPU 11 GB of HBM instead of 6.6 GB (WORKLOG.md).
+# PP_LAYOUT="" keeps Megatron's even split.
+if [ -z "${PP_LAYOUT+set}" ] && [ "$PP" = 2 ] && [ -z "$VPP" ]; then
+    if [ "$MODE" = smoke ]; then PP_LAYOUT="Et*3|tmL"; else PP_LAYOUT="Et*21|t*19mL"; fi
+fi
+PP_LAYOUT=${PP_LAYOUT:-}
 if [ "$DISPATCHER" = auto ]; then (( EP * ETP <= 4 )) && DISPATCHER=hybridep || DISPATCHER=alltoall; fi
 NSYS_STEPS=${NSYS_STEPS:-10:12}; NSYS_RANKS=${NSYS_RANKS:-0}; NSYS_TRACE=${NSYS_TRACE:-cuda,nvtx}
-EVAL_ITERS=${EVAL_ITERS:-32}
+EVAL_ITERS=${EVAL_ITERS:-16}   # 16 x GBS 2560 = 168M tokens per evaluation (~1% of the run time at 8 nodes)
 SUMMARIZE=1
 OVERRIDES=()
 
@@ -111,7 +140,7 @@ case $MODE in
         NETLOG=${NETLOG:-2}; NSYS=${NSYS:-0}
         BLEND=${BLEND:-$DATA_ROOT/blends/lightning35_qwen35.json}
         OVERRIDES+=(validation.eval_interval=${EVAL_INTERVAL:-500} validation.eval_iters=$EVAL_ITERS)
-        CKPT=save_load; RESUBMIT=true; MAX_RESUBMITS=${MAX_RESUBMITS:-50}
+        CKPT=save_load; RESUBMIT=true; MAX_RESUBMITS=${MAX_RESUBMITS:-200}
         SUMMARIZE=0
         ;;
     *) echo "$USAGE"; exit 1 ;;
@@ -151,6 +180,27 @@ if [ -n "${GBS_SCHEDULE:-}" ] || [ "$GBS_RAMP" != none ] || [ -n "${TRAIN_TOKENS
     fi
 fi
 if (( GBS % (MBS * DP) != 0 )); then echo "GBS=$GBS must be a multiple of MBS*DP=$((MBS * DP))"; exit 1; fi
+if [ -n "$VPP" ]; then
+    (( PP > 1 )) || { echo "VPP needs PP > 1"; exit 1; }
+    (( $(model_layers) % (PP * VPP) == 0 )) || { echo "layers ($(model_layers)) not divisible by PP*VPP=$((PP * VPP))"; exit 1; }
+fi
+if [ "$EP_OVERLAP" = 1 ] && (( PP > 1 )) && [ -z "$VPP" ]; then echo "EP_OVERLAP=1 with PP > 1 needs VPP"; exit 1; fi
+if [ -n "$PP_LAYOUT" ]; then
+    LAYOUT_CHECK=$(python3.11 - "$PP_LAYOUT" "$PP" "${VPP:-1}" "$(model_layers)" <<'PYCHK'
+import re, sys
+layout, pp, vpp, layers = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+def expand(text):  # same grammar as Megatron's PipelineParallelLayerLayout: (x)*n, x*n
+    while "(" in text:
+        text = re.sub(r"\(([^()]*)\)\*(\d+)", lambda m: m.group(1) * int(m.group(2)), text)
+    return re.sub(r"([EtmL])\*(\d+)", lambda m: m.group(1) * int(m.group(2)), text.replace(",", ""))
+stages = expand(layout).split("|")
+t = sum(st.count("t") for st in stages)
+ok = len(stages) == pp * vpp and t == layers and stages[0].startswith("E") and stages[-1].endswith("L")
+print("ok" if ok else f"layout has {len(stages)} stages / {t} layers; need PP*VPP={pp*vpp} stages, {layers} layers, E first, L last")
+PYCHK
+)
+    [ "$LAYOUT_CHECK" = ok ] || { echo "PP_LAYOUT: $LAYOUT_CHECK"; exit 1; }
+fi
 [ -f "$IMAGE_DIR/$IMAGE_NAME" ] || { echo "image $IMAGE_DIR/$IMAGE_NAME missing: sbatch env/build_image.sbatch"; exit 1; }
 [ -f "$HF_HOME/.prefetched-${HF_MODEL_ID//\//--}" ] || { echo "run tools/prefetch_hf.sh first (Qwen3.5 config/tokenizer for offline jobs)"; exit 1; }
 if [ -n "${BLEND:-}" ] && [ ! -f "$BLEND" ]; then echo "BLEND=$BLEND does not exist (data/build_blend.py)"; exit 1; fi
@@ -192,6 +242,9 @@ OVERRIDES+=(
 if [ "$GRAD_FP32" = 1 ]; then GF=true; else GF=false; fi
 OVERRIDES+=(mixed_precision.grad_reduce_in_fp32=$GF ddp.grad_reduce_in_fp32=$GF)
 [ "$CUDA_GRAPHS" = 0 ] && OVERRIDES+=(model.cuda_graph_impl=none)
+[ -n "$VPP" ] && OVERRIDES+=(model.virtual_pipeline_model_parallel_size=$VPP)
+[ -n "$PP_LAYOUT" ] && OVERRIDES+=("model.pipeline_model_parallel_layout='$PP_LAYOUT'")
+[ "$EP_OVERLAP" = 1 ] && OVERRIDES+=(comm_overlap.overlap_moe_expert_parallel_comm=true)
 case $DISPATCHER in
     alltoall) ;;
     hybridep)
@@ -215,33 +268,36 @@ case $CKPT in
     save_load)
         EXIT_MINS=$(( $(hms_to_mins "$WALLTIME") - 15 ))
         OVERRIDES+=(checkpoint.save=RUN_DIR/checkpoints checkpoint.load=RUN_DIR/checkpoints
-                    checkpoint.save_interval=${SAVE_INTERVAL:-500} train.exit_duration_in_mins=$EXIT_MINS) ;;
+                    checkpoint.save_interval=${SAVE_INTERVAL:-100} train.exit_duration_in_mins=$EXIT_MINS) ;;
 esac
 # shellcheck disable=SC2206
 [ -n "${EXTRA:-}" ] && OVERRIDES+=($EXTRA)
 
 ################ Names and paths ################
 TAG="q35a3b-${NODES}n-ep${EP}"
-(( TP > 1 )) && TAG+="-tp$TP"; (( PP > 1 )) && TAG+="-pp$PP"; (( CP > 1 )) && TAG+="-cp$CP"
+(( TP > 1 )) && TAG+="-tp$TP"; (( PP > 1 )) && TAG+="-pp$PP"; [ -n "$VPP" ] && TAG+="-vpp$VPP"; (( CP > 1 )) && TAG+="-cp$CP"
+[ -n "$PP_LAYOUT" ] && TAG+="-lay$(echo "$PP_LAYOUT" | tr -cd '0-9|' | tr '|' 'x')"
 TAG+="-mbs${MBS}-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}"
 [ "$GRAD_FP32" = 1 ] && TAG+="-gf32"; [ "$CUDA_GRAPHS" = 0 ] && TAG+="-nocg"; [ "$RECOMPUTE" != none ] && TAG+="-rc"
-[ "$DISPATCHER" != alltoall ] && TAG+="-$DISPATCHER"
+[ "$DISPATCHER" != alltoall ] && TAG+="-$DISPATCHER"; [ "$EP_OVERLAP" = 1 ] && TAG+="-epov"
 if [ "$MODE" = train ]; then
     # Stable across resubmissions and node counts: torch_dist checkpoints reshard on load
     # across data-parallel sizes, so only data-semantic settings are in the name. The
-    # optimizer state is saved DP-reshardable (Megatron default), so TP/PP/CP/EP/ETP must
+    # optimizer state is saved DP-reshardable (Megatron default), so TP/PP/CP/EP/ETP/VPP must
     # stay fixed for the life of a run (checked below) unless it was saved with
     # checkpoint.dist_ckpt_optim_fully_reshardable=true.
     EXP_NAME="train-q35a3b-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}${EXP_SUFFIX:+-$EXP_SUFFIX}"
 else
     EXP_NAME="${MODE}-${TAG}${EXP_SUFFIX:+-$EXP_SUFFIX}"
 fi
+# A dry run gets its own run directory: it must not create (and leave files in) the real one.
+[ "${DRYRUN:-0}" = 1 ] && EXP_NAME+="-dryrun"
 JOB_NAME="mbcscs-${EXP_NAME}"
 RUN_DIR=$RUN_ROOT/$EXP_NAME
 SCRIPT="$WORKDIR/logs/${JOB_NAME}.sbatch"
 mkdir -p "$WORKDIR/logs"
 if [ "$MODE" = train ] && [ "${DRYRUN:-0}" != 1 ]; then
-    LAYOUT="TP=$TP PP=$PP CP=$CP EP=$EP ETP=$ETP"
+    LAYOUT="TP=$TP PP=$PP CP=$CP EP=$EP ETP=$ETP${VPP:+ VPP=$VPP}${PP_LAYOUT:+ LAYOUT=$PP_LAYOUT}"
     OLD_LAYOUT=$(cat "$RUN_DIR/layout" 2>/dev/null || true)
     if [ -s "$RUN_DIR/checkpoints/latest_checkpointed_iteration.txt" ] && [ -n "$OLD_LAYOUT" ] \
             && [ "$OLD_LAYOUT" != "$LAYOUT" ] && [ "${FORCE_LAYOUT:-0}" != 1 ]; then
@@ -250,7 +306,18 @@ if [ "$MODE" = train ] && [ "${DRYRUN:-0}" != 1 ]; then
         echo "or FORCE_LAYOUT=1 if the checkpoints were saved with checkpoint.dist_ckpt_optim_fully_reshardable=true."
         exit 1
     fi
-    [ "${SUBMIT:-1}" = 1 ] && mkdir -p "$RUN_DIR" && echo "$LAYOUT" > "$RUN_DIR/layout"
+    # With EP > 1 Bridge saves the RNG state per data-parallel rank (a PP x TP x DP sharded object), so
+    # a run continued on another node count cannot load it ("Missing key in checkpoint state_dict:
+    # rng_state/...", job 3704823). Nothing in this model draws from it (dropout 0, no router jitter,
+    # the data order comes from the samplers' own seeds): start the RNG from the seed instead.
+    OLD_NODES=$(cat "$RUN_DIR/nodes" 2>/dev/null || true)
+    if [ -s "$RUN_DIR/checkpoints/latest_checkpointed_iteration.txt" ] && [ "$OLD_NODES" != "$NODES" ]; then
+        echo "node count $NODES, checkpoints from ${OLD_NODES:-an unknown node count}: checkpoint.load_rng=false"
+        OVERRIDES+=(checkpoint.load_rng=false)
+    fi
+    [ "${SUBMIT:-1}" = 1 ] && mkdir -p "$RUN_DIR" && echo "$LAYOUT" > "$RUN_DIR/layout" && echo "$NODES" > "$RUN_DIR/nodes"
+    # A launch by hand restarts the crash-retry budget of job_body.sh.
+    [ "${SUBMIT:-1}" = 1 ] && rm -f "$RUN_DIR/logs/consecutive-failures"
 fi
 
 ################ Snapshot of this repository's runtime files ################
@@ -277,7 +344,7 @@ for o in "${OVERRIDES[@]}"; do TRAIN_ARGS+=("${o//RUN_DIR/$RUN_DIR}"); done
 
 if [ "${DRYRUN:-0}" = 1 ]; then
     NODES=1; PARTITION=debug; WALLTIME=00:15:00; NETLOG=0; NSYS=0; RESUBMIT=false; SUMMARIZE=0
-    JOB_NAME+="-dryrun"; SCRIPT="$WORKDIR/logs/${JOB_NAME}.sbatch"
+    SCRIPT="$WORKDIR/logs/${JOB_NAME}.sbatch"
     # The dry run resolves the config for the real world size on a single node.
     export WORLD_SIZE=$WORLD
 fi
@@ -296,7 +363,8 @@ cat <<EOF
 #SBATCH --cpus-per-task=72
 #SBATCH --output=${WORKDIR}/logs/%x-%j.log
 #SBATCH --error=${WORKDIR}/logs/%x-%j.log
-#SBATCH --no-requeue
+#SBATCH $([ "$MODE" = train ] && echo --requeue || echo --no-requeue)
+#SBATCH --open-mode=append
 #
 # Generated by launch.sh on $(date -Iseconds) -- self-contained, resubmittable as is.
 
@@ -323,6 +391,8 @@ NSYS_TRACE=$NSYS_TRACE
 SUMMARIZE=$SUMMARIZE
 RESUBMIT=$RESUBMIT
 MAX_RESUBMITS=$MAX_RESUBMITS
+EXCLUDE_FLAKY=$EXCLUDE_FLAKY
+CRASH_RETRIES=${CRASH_RETRIES:-2}
 TRAIN_ITERS=$STEPS
 BATCH_SCHEDULE=$BATCH_SCHEDULE
 WANDB_PROJECT=$(printf %q "${WANDB_PROJECT:-}")
@@ -344,5 +414,7 @@ echo "  scripts: $SRC"
 echo "  layout : nodes=$NODES world=$WORLD TP=$TP PP=$PP CP=$CP EP=$EP DP=$DP MBS=$MBS GBS=$GBS seq=$SEQ_LEN"
 echo "  logging: NETLOG=$NETLOG NSYS=$NSYS W&B=$([ -n "${WANDB_API_KEY:-}" ] && echo "on${WANDB_MODE:+ ($WANDB_MODE)}" || { [ "${WANDB_MODE:-}" = offline ] && echo "offline (no key)" || echo off; })"
 if [ "${SUBMIT:-1}" = 1 ]; then
-    sbatch "$SCRIPT"
+    FLAKY=$([ "$EXCLUDE_FLAKY" = 1 ] && "$WORKDIR/tools/flaky_nodes.sh" || true)
+    [ -n "$FLAKY" ] && echo "  exclude: $(scontrol show hostnames "$FLAKY" | wc -l) nodes that recently dropped out of Slurm"
+    sbatch ${FLAKY:+--exclude="$FLAKY"} "$SCRIPT"
 fi

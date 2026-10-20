@@ -33,6 +33,14 @@ dataset:
   # ~1000+ blend prefixes: build the per-prefix sample indices in parallel the first time
   # (cached under dataset.path_to_cache afterwards). Does not change which samples are drawn.
   num_dataset_builder_threads: 8
+  # Megatron's GPTDataset builds a [1, 4096, 4096] attention mask (16.7 MB) and caches it per dataset
+  # object, i.e. per blend prefix (964) in every dataloader worker: host memory grew ~5 GB/min per node
+  # until the kernel OOM-killed a rank (jobs 3703471, 3703919, 3704232). Bridge never uses it
+  # (skip_getting_attention_mask_from_dataset defaults to True: the model gets None and attention
+  # applies its causal mask itself), so not creating it changes nothing else.
+  create_attention_mask: false
+  # A rank needs ~3.5 samples/s at most; 2 workers per rank are plenty (the recipe has 8).
+  num_workers: 2
 
 dist:
   # First steps include TE/Triton JIT and CUDA-graph capture on every rank; on a busy
@@ -49,5 +57,10 @@ logger:
   log_params_norm: false
 
 checkpoint:
-  # Keep the last few checkpoints only (each is ~0.5 TB with fp32 optimizer state).
+  # Keep the last few checkpoints only (each is ~0.5 TB with fp32 optimizer state: measured 469 GB).
   most_recent_k: 3
+  # Split the checkpoint read across data-parallel ranks (exchanged over NCCL) instead of every
+  # replica reading its whole shard: with the default, all 4 ranks of a node held a full shard in
+  # host memory while loading (~6 min at 8 nodes) and the node ran out of host memory soon after
+  # (job 3703471).
+  fully_parallel_load: true

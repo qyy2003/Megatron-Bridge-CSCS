@@ -190,6 +190,24 @@ def main():
         w = csv.writer(f)
         w.writerow(["host", "t_ns", "dt_s", "nic_tx_GBps", "nic_rx_GBps", "nvlink_tx_GBps_per_gpu"])
         w.writerows(rate_rows)
+    mem_min, hbm_min = {}, {}
+    for f in sorted((root / "netmon").glob("*.jsonl")):
+        for r in read_jsonl(f):
+            m = r.get("mem_kb") or {}
+            if "MemAvailable" in m:
+                cur = mem_min.get(f.stem)
+                mem_min[f.stem] = min(cur, m["MemAvailable"]) if cur is not None else m["MemAvailable"]
+            hbm = r.get("gpu_hbm_free_kb") or []
+            if hbm:
+                cur = hbm_min.setdefault(f.stem, [None] * len(hbm))
+                hbm_min[f.stem] = [v if c is None else (c if v is None else min(c, v)) for c, v in zip(cur, hbm)]
+    if mem_min:
+        summary["host_memory"] = {"min_MemAvailable_GB_per_node": {h: round(v / 1e6, 1) for h, v in sorted(mem_min.items())}}
+    if hbm_min:
+        # Lowest free HBM seen per GPU (all ranks, not only the ones PyTorch's counters report);
+        # under ~2 GB a routing spike on the busiest experts can run a rank out of memory.
+        summary["gpu_memory"] = {"min_free_HBM_GB_per_gpu": {h: [None if v is None else round(v / 1e6, 1) for v in vals]
+                                                             for h, vals in sorted(hbm_min.items())}}
     if rate_rows:
         busy = [r for r in rate_rows if r[3] > 0.01] or rate_rows
         summary["netmon"] = {"samples": len(rate_rows), "peak_node_tx_GBps": max(r[3] for r in rate_rows),

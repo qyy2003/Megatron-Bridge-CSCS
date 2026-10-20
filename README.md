@@ -13,6 +13,9 @@ with W&B loss logging and a record of the network traffic.
   on capstor, tokenized with the Qwen3.5 tokenizer.
 - Code management as in the earlier Megatron-LM project: upstream as pinned submodules,
   every local change a self-documenting patch, `launch.sh` writes a self-contained sbatch.
+- **Production run** (started 2026-10-20, 8 nodes, 1T tokens): status, configuration and how to
+  monitor / stop / resume / rescale in [`PRODUCTION_RUN.md`](PRODUCTION_RUN.md); the measurements
+  behind every choice in [`WORKLOG.md`](WORKLOG.md).
 
 ## Pinned versions (stable releases only) — `env/versions.env`
 
@@ -145,6 +148,43 @@ sequences (**2.1M → 10.5M tokens per batch**) in 4 equal steps over the first 
   stops, and the job restarts training in the same allocation (a few minutes per step, 4 times per
   run); the new process resumes with the larger batch.
 
+### Job lifecycle in train mode (verified at 8 nodes on the real blend)
+
+- Jobs of `WALLTIME` (12 h); training stops 15 min before the limit with a checkpoint and the job
+  resubmits itself right away (Slurm's own copy of the running script, so later `launch.sh` calls
+  cannot change a running experiment; the network logs are compressed only afterwards) until the
+  token budget is reached. `MAX_RESUBMITS` [200] caps the chain. Every job runs `train/`, `tools/`,
+  `conf/` and `patches/` from a read-only snapshot taken at submission.
+- **Node failures**: train jobs are `--requeue`; Slurm requeues a job that loses a node and it
+  resumes from the last checkpoint (happened twice in tests). A requeued job that had already
+  submitted its successor exits instead of training twice. Both failures were Clariden-side: a set
+  of ~70–100 nodes keeps dropping out of Slurm for an instant (`DOWN* Not responding`, hundreds of
+  events a day), which kills every job on them. launch.sh and each resubmission therefore pass
+  `--exclude=` the nodes with recent events (`tools/flaky_nodes.sh`: ≥ 1 in 12 h or ≥ 3 in 48 h;
+  would have avoided 91% of the events of 18–20 Oct; `EXCLUDE_FLAKY=0` disables it), and train mode
+  saves every 100 steps (`SAVE_INTERVAL`; ~77 min at GBS 2560 on 8 nodes) so a failure loses at most
+  that.
+- **Crashes** (NCCL timeout, GPU error, ...): the job resubmits from the last checkpoint too, but at
+  most `CRASH_RETRIES` [2] times without a new checkpoint in between; then the chain stops until you
+  relaunch (tested by killing a training step: job 3704910).
+- **Batch-size steps**: the trainer saves a checkpoint and stops; the job restarts training in
+  the same allocation if ≥ 25 min are left, otherwise the next job continues (both seen in tests).
+- **Checkpoints** (torch_dist, 469 GB each with the fp32 optimizer state, last 3 kept): saving
+  takes 23–106 s at 8 nodes (median ~50 s); loading took 6–17 min with the default per-replica reads,
+  3–6 min split across data-parallel ranks (`checkpoint.fully_parallel_load: true`). The optimizer state is
+  DP-reshardable only: the node count may change between jobs, TP/PP/CP/EP/ETP/VPP may not
+  (launch.sh checks `$RUN_DIR/layout`). On a new node count launch.sh also sets
+  `checkpoint.load_rng=false`: with EP > 1 the RNG state is saved per data-parallel rank and cannot
+  be resharded (nothing in this model draws from it: no dropout, no router jitter).
+- **Host memory**: the node's anonymous memory grew ~5 GB/min until the kernel OOM-killed a rank,
+  20–40 min into a job. Cause: Megatron's `GPTDataset` builds a 16.7 MB `[1, 4096, 4096]` attention
+  mask and caches it per dataset object, and the blend has one per prefix (964) — in every dataloader
+  worker, for the train, validation and test loaders: up to 16 GB per worker. Bridge never uses that
+  mask (attention applies its causal mask itself; the batch gets `attention_mask=None`), so the
+  profile sets `dataset.create_attention_mask: false`. Also 2 workers per rank instead of 8 (plenty
+  for ≤ 3.5 samples/s per rank), `gc.freeze()` before they fork, `malloc_trim` after the checkpoint
+  load and every save. Host and GPU memory of every node are in the step logs and W&B (`node/*`).
+
 ### Parallel layout on GH200
 
 **How the parallelism works.** Megatron's "MoE parallel folding" gives the two halves of the
@@ -184,11 +224,48 @@ Measured on 8 nodes (32 GH200), full model, mock data, GBS 512 × 4096, iteratio
 | EP4 PP2 MBS1, alltoall | 62.5 / 68.1 | 12.86 | 5,100 | 115 |
 | EP4 PP2 MBS1, **HybridEP** | 62.1 / 68.2 | **11.68** | **5,610** | **127** |
 | EP4 PP2 MBS2 | OOM | – | – | – |
-| EP4 PP4 MBS2, alltoall | pending | | | |
-| EP4 PP2 MBS1, CUDA graphs off | pending | | | |
+| EP4 PP4 MBS2, alltoall | 82 (stage 0) | OOM at CUDA-graph capture (4 microbatches in flight) | – | – |
+| EP4 PP2 MBS1, HybridEP, CUDA graphs off | 62.1 / 68.2 | 15.53 | 4,220 | 96 |
+| EP4 PP2 MBS1, HybridEP, NCCL inspector on (NETLOG=2) | 62.1 / 68.2 | 11.78 | 5,480 | 125 |
+| EP4 PP2 MBS1, HybridEP, **GBS 2560** (final ramp size, 160 microbatches/rank) | 68.2 alloc / 73.1 reserved (last stage, after graph capture) | 50.2 | 6,530 | 147 |
+| EP4 PP2 layout 22/18, HybridEP | 68.2 / 63.5 | 10.96 | 5,980 | 131 |
+| EP4 PP2 layout **23/17**, HybridEP | 71.2 / 61.2 | **10.44** | **6,280** | 138 |
+| EP4 PP2 layout 24/16, HybridEP | 73.9 / 59.1 | 10.59 | 6,190 | 139 |
+| EP4 PP2 layout 25/15, HybridEP | 76.9 / 56.7 | 11.01 | 5,950 | 134 |
+| EP4 PP2 VPP2 (± EP overlap), HybridEP | 69–71 / 75 | 11.86 with EP overlap | – | failed: kernel fault (VPP2), hang (VPP2 + EP overlap) |
+| EP4 PP2 layout 23/17, HybridEP, GBS 2560 | 71.3 alloc / 76.3 reserved (stage 0, after graph capture) / 61.2 / 66 | 46.1 | 7,110 | 160 |
 
-Default: **EP=4, PP=2**, TP=CP=1, MBS=1, seq 4096, bf16 gradient reduction (`GRAD_FP32=0`, what
-NVIDIA's own Hopper MoE recipe for Qwen3-30B-A3B uses), ≥ 8 nodes; global batch 512 → 2560 (ramp).
+TE-scoped CUDA graphs are worth +33% on GH200 (the Grace CPU cannot launch the many small MoE /
+GDN kernels fast enough: ~230k kernels per step, 11–16 µs on average), HybridEP +10%, the final
+batch size +16% (pipeline bubble 1/160 instead of 1/32), and an **uneven pipeline split +12%**: an
+nsys profile showed the first stage waiting ~22% of the time for the last one, which also computes
+both 248k-vocab output heads (main and MTP) and the MTP layer; `Et*23|t*17mL` (23 layers + embedding
+| 17 layers + MTP + loss) is the optimum on mock data. VPP (interleaving, required for MoE
+EP-communication overlap with PP) crashed or hung on this stack and was not faster. The NCCL
+inspector costs 2.4%.
+
+**Real data changes the picture** (8 nodes, GBS 1024, 45 iterations from scratch, same seed and data
+for every split, so the same routing at each step): once the router learns, the experts' load becomes
+uneven (`global_load_balancing_loss` ~3 instead of ~1 on mock data), every MoE layer waits for its
+busiest expert-parallel rank, and steps get slower as training proceeds (16.8 → 21.6 s for 23/17
+between iterations 20 and 45). The per-layer cost then dominates the last stage's extra work, and
+the optimum moves toward an even split:
+
+| Split | s/it, its 16–25 / 26–35 / 36–45 | Lowest free HBM on any GPU |
+|---|---|---|
+| 20/20 | 18.99 / 18.08 / 21.27 | 8.2 GB (last stage) |
+| **21/19** | 18.01 / 17.50 / **20.51** | **11.0 GB** |
+| 22/18 | 17.99 / 18.04 / 21.88 | 8.2 GB (first stage) |
+| 23/17 | **16.99** / 17.62 / 21.24 | 6.6 GB (first stage) |
+
+21/19 is as fast as 23/17 over the run (18.67 vs 18.62 s) and faster in the latest window, and it
+leaves 11 GB on the fullest GPU instead of 6.6 GB: the busiest expert ranks need the most activation
+memory, so it is the default for `PP=2` (`Et*21|t*19mL`). Expect real steps to be slower than the
+mock-data numbers above while routing is unbalanced.
+
+Default: **EP=4, PP=2 with the 21/19 layout**, TP=CP=1, MBS=1, HybridEP, TE-scoped CUDA graphs,
+seq 4096, bf16 gradient reduction (`GRAD_FP32=0`, what NVIDIA's own Hopper MoE recipe for
+Qwen3-30B-A3B uses), ≥ 8 nodes; global batch 512 → 2560 (ramp).
 
 ### Deviations from the GB200 recipe (`conf/qwen35_35b_a3b_gh200.yaml` + launch.sh)
 
@@ -237,12 +314,22 @@ recipe's own hyper-parameters differ (seq 8192, LR 1.6e-3→1.6e-5, warmup 333, 
   `invalid_size_records`. Volume (smoke run, 8 ranks, 20 steps of a 4-layer model):
   149k records, 70 MB raw, 4.6 MB gzipped — it grows with layers × microbatches × ranks, so
   for long production runs check the size of the first job's `nccl-inspector/` (or use
-  `NETLOG=1`).
+  `NETLOG=1`). At full scale (8 nodes, HybridEP): 1.17M records (546 MB raw, 23 MB gzipped) per
+  25 steps at GBS 512; projected ~10 TB raw / ~430 GB gzipped for a 1T-token run (the record count
+  follows the number of microbatches, not the node count); inspector overhead 2.4%. With HybridEP
+  the MoE dispatch/combine bypasses NCCL, so it appears as NVLink byte counters (netmon), not as
+  per-op records; `DISPATCHER=alltoall` brings per-op MoE records back at ~10% speed.
+- **Host memory** (since the lifecycle test ran a node out of host memory): netmon samples
+  `/proc/meminfo` every second, every step logs the node's MemAvailable/Shmem and the rank's
+  VmRSS/VmHWM (`steps/<host>.jsonl`, W&B `node/*_GB`), and the summary reports the minimum
+  MemAvailable per node.
 - **nsys** (`NSYS=1`, optional): raw timeline of steps `NSYS_STEPS` (default 10:12) on ranks
   `NSYS_RANKS` (default 0) with CUDA + NVTX (NCCL's own NVTX ranges included), CUDA graphs
   traced per node. Collection only runs inside the window (cudaProfilerApi capture range);
   in the smoke run the profiled step was ~4% slower and opening/closing the window cost
-  ~1.4 s each.
+  ~1.4 s each; at full scale (8 nodes, ranks 0 and 16) the captured steps were 60–75% slower,
+  closing the window cost ~28 s, and each report is ~150 MB for 3 steps — fine for an occasional
+  window, but the timings inside it are not representative.
 
 ## Storage (CSCS cleanup: 14 days on iopsstor, 30 days on capstor scratch)
 
@@ -254,7 +341,10 @@ recipe's own hyper-parameters differ (seq 8192, LR 1.6e-3→1.6e-5, warmup 333, 
 | code snapshots, dataset index cache, HF files | iopsstor |
 
 The project `prep23` has no Store / datacache allocation: copy anything worth keeping
-(final checkpoints) elsewhere before the cleanup policy deletes it.
+(final checkpoints) elsewhere before the cleanup policy deletes it. A running training reads the
+tokenized data, snapshots and caches at every job start, which keeps them; a pause of more than 14
+days loses them (re-tokenize: `sbatch data/tokenize.sbatch`). Per-job network logs, nsys reports and
+old W&B/TensorBoard files are never read again and disappear 30 days after they were written.
 
 ## Patches
 

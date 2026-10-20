@@ -6,8 +6,12 @@ Slingshot NIC on the node:
   * bytes on the wire, total and split into HPC-protocol ("opt": NCCL/libfabric, Lustre)
     and Ethernet/IP ("ieee") frames,
   * packets sent/received per Slingshot traffic class,
-plus the IP-level byte counters of the hsn netdevs and, every --nvlink-every samples,
-the per-link NVLink TX/RX counters (KiB) of each local GPU via `nvidia-smi nvlink -gt d`.
+plus the IP-level byte counters of the hsn netdevs, host memory from /proc/meminfo (kB:
+MemAvailable, Shmem, AnonPages, Cached; a node running out of host memory gets OOM-killed), the free
+HBM of every GPU (kB; on GH200 each GPU's memory is a CPU-less NUMA node and CUDA allocations show up
+there as used, so this covers all ranks of the node) and,
+every --nvlink-every samples, the per-link NVLink TX/RX counters (KiB) of each local GPU via
+`nvidia-smi nvlink -gt d`.
 
 Counters are cumulative since boot; consumers difference consecutive records
 (tools/summarize_netlogs.py does). Standard library only, Python >= 3.6, so it runs
@@ -94,6 +98,64 @@ def read_nvlink():
     return {g: [links[k] for k in sorted(links)] for g, links in gpus.items()} or None
 
 
+MEMINFO_FIELDS = ("MemTotal", "MemAvailable", "Shmem", "AnonPages", "Cached")
+
+
+def gpu_numa_nodes():
+    """CPU-less NUMA nodes with memory, in node order (= GPU order): the GPUs' HBM on GH200."""
+    root = "/sys/devices/system/node"
+    try:
+        names = sorted((n for n in os.listdir(root) if n.startswith("node") and n[4:].isdigit()),
+                       key=lambda n: int(n[4:]))
+    except OSError:
+        return []
+    nodes = []
+    for n in names:
+        try:
+            with open(os.path.join(root, n, "cpulist")) as f:
+                if f.read().strip():
+                    continue
+            if read_node_meminfo(n).get("MemTotal", 0) > 0:
+                nodes.append(n)
+        except OSError:
+            pass
+    return nodes
+
+
+def read_node_meminfo(node):
+    """{MemTotal, MemFree} in kB of one NUMA node ("Node 4 MemFree:   22343680 kB")."""
+    out = {}
+    with open(os.path.join("/sys/devices/system/node", node, "meminfo")) as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) >= 4 and parts[2] in ("MemTotal:", "MemFree:"):
+                out[parts[2][:-1]] = int(parts[3])
+    return out
+
+
+def read_gpu_hbm_free(nodes):
+    out = []
+    for n in nodes:
+        try:
+            out.append(read_node_meminfo(n).get("MemFree"))
+        except OSError:
+            out.append(None)
+    return out
+
+
+def read_meminfo():
+    out = {}
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                key, _, rest = line.partition(":")
+                if key in MEMINFO_FIELDS:
+                    out[key] = int(rest.split()[0])
+    except OSError:
+        pass
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, help="JSONL file to append to")
@@ -116,14 +178,18 @@ def main():
         names += [n for n in sorted(os.listdir(os.path.join(CXI_ROOT, devices[0], "device", "telemetry")))
                   if rx.search(n) and n not in names]
 
+    gpu_nodes = gpu_numa_nodes()
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "a", buffering=1) as fh:
         fh.write(json.dumps({"type": "meta", "host": socket.gethostname(), "t_ns": now_ns(),
                              "interval_s": args.interval, "cxi_devices": devices, "cxi_counters": names,
+                             "gpu_numa_nodes": gpu_nodes,
+                             "gpu_hbm_total_kb": [read_node_meminfo(n).get("MemTotal") for n in gpu_nodes],
                              "slurm_job_id": os.environ.get("SLURM_JOB_ID")}) + "\n")
         start, k = time.monotonic(), 0
         while not _stop:
-            rec = {"type": "sample", "t_ns": now_ns(), "cxi": read_cxi(devices, names), "hsn": read_hsn()}
+            rec = {"type": "sample", "t_ns": now_ns(), "cxi": read_cxi(devices, names), "hsn": read_hsn(),
+                   "mem_kb": read_meminfo(), "gpu_hbm_free_kb": read_gpu_hbm_free(gpu_nodes)}
             if args.nvlink_every and k % args.nvlink_every == 0:
                 rec["nvlink_kib"] = read_nvlink()
             rec["t_end_ns"] = now_ns()

@@ -6,7 +6,13 @@ set -o pipefail
 ulimit -c 0
 RESUBMIT_COUNT=${RESUBMIT_COUNT:-0}
 echo "START $(date)  job=$SLURM_JOB_ID  nodes=$SLURM_NNODES ($SLURM_JOB_NODELIST)"
-echo "mode=$MODE  exp=$EXP_NAME  resubmit=$RESUBMIT_COUNT/$MAX_RESUBMITS"
+echo "mode=$MODE  exp=$EXP_NAME  resubmit=$RESUBMIT_COUNT/$MAX_RESUBMITS  slurm-restart=${SLURM_RESTART_COUNT:-0}"
+# Train jobs are --requeue (node or prolog failures must not end the resubmission chain). A job
+# requeued after it already submitted its successor must not train a second copy of the run.
+SUCCESSOR=$RUN_DIR/logs/successor-of-$SLURM_JOB_ID
+if [ "${SLURM_RESTART_COUNT:-0}" -gt 0 ] && [ -s "$SUCCESSOR" ]; then
+    echo "requeued after submitting job $(cat "$SUCCESSOR"): nothing to do"; exit 0
+fi
 
 NETLOG_DIR=$RUN_DIR/netlogs/job_$SLURM_JOB_ID
 NSYS_DIR=$RUN_DIR/nsys/job_$SLURM_JOB_ID
@@ -161,12 +167,17 @@ PY'
 ) 9>"$PRESTEP_LOCK"
 PRE_RC=$?
 rm -f "$RUN_DIR/logs/.prestep-$SLURM_JOB_ID.lock"
+# Nodes to avoid in a resubmission: those that recently dropped out of Slurm ("Not responding"
+# kills the whole job), see tools/flaky_nodes.sh.
+flaky_nodes() { [ "${EXCLUDE_FLAKY:-1}" = 1 ] && bash "$SRC/tools/flaky_nodes.sh"; true; }
 if [ "$PRE_RC" -ne 0 ]; then
     BAD=$(sort -u "$BADNODES" 2>/dev/null | paste -sd, -)
     if [ -n "$BAD" ]; then
         echo "ERROR: unusable node(s): $BAD"
         if [ "$RESUBMIT" = true ] && [ "$RESUBMIT_COUNT" -lt "$MAX_RESUBMITS" ]; then
-            sbatch --chdir="$WORKDIR" --exclude="$BAD" --export=ALL,RESUBMIT_COUNT=$((RESUBMIT_COUNT + 1)) "$SELF"
+            EXCL=$BAD; F=$(flaky_nodes); [ -n "$F" ] && EXCL=$(scontrol show hostlist "$BAD,$F")
+            NEXT_ID=$(sbatch --parsable --chdir="$WORKDIR" --exclude="$EXCL" --export=ALL,RESUBMIT_COUNT=$((RESUBMIT_COUNT + 1)) "$SELF") \
+                && echo "$NEXT_ID" > "$SUCCESSOR" && echo "[resubmit] submitted job $NEXT_ID (excluding $BAD and recently flaky nodes)"
         else
             echo "resubmit by hand: sbatch --exclude=$BAD $SELF"
         fi
@@ -216,6 +227,46 @@ while true; do
     TRAIN_CMD=("${NEXT[@]}" "train.exit_duration_in_mins=$((LEFT - 15))")
 done
 
+########## Auto-resubmit (train mode) ##########
+# Right after training, before compressing logs: compressing ~90 GB of NCCL-inspector logs must
+# never push the job past its wall time ahead of the resubmission (a TIMEOUT is not requeued).
+# After a clean exit (Megatron saves and exits before the wall time) the run continues. After a
+# crash (NCCL timeout, GPU error, ...) it continues from the last checkpoint as well, but at most
+# CRASH_RETRIES times without a new checkpoint in between, so a crash that recurs at the same
+# point never turns into a resubmission loop.
+if [ "$RESUBMIT" = true ]; then
+    LATEST=$(cat "$RUN_DIR/checkpoints/latest_checkpointed_iteration.txt" 2>/dev/null || echo 0)
+    NEXT=$((RESUBMIT_COUNT + 1))
+    FAILS_FILE=$RUN_DIR/logs/consecutive-failures   # "<failed jobs in a row> <latest checkpoint then>"
+    GO=true
+    if [ "$SRUN_RC" -eq 0 ]; then
+        rm -f "$FAILS_FILE"
+    else
+        read -r FAILS FAIL_AT 2>/dev/null < "$FAILS_FILE" || { FAILS=0; FAIL_AT=-1; }
+        if [ "$LATEST" -gt "${FAIL_AT:--1}" ]; then FAILS=1; else FAILS=$((FAILS + 1)); fi
+        echo "$FAILS $LATEST" > "$FAILS_FILE"
+        echo "[resubmit] training failed (srun exit $SRUN_RC, nodes $SLURM_JOB_NODELIST): failure $FAILS since checkpoint $LATEST"
+        if [ "$FAILS" -gt "${CRASH_RETRIES:-2}" ]; then
+            GO=false
+            echo "[resubmit] not resubmitting after $FAILS failures at checkpoint $LATEST: fix the cause, then relaunch"
+        fi
+    fi
+    echo "[resubmit] latest_iter=$LATEST target=$TRAIN_ITERS attempt=$NEXT/$MAX_RESUBMITS"
+    if [ "$GO" != true ]; then
+        :
+    elif [ "$LATEST" -ge "$TRAIN_ITERS" ]; then
+        echo "[resubmit] training complete"
+    elif [ "$NEXT" -gt "$MAX_RESUBMITS" ]; then
+        echo "[resubmit] MAX_RESUBMITS reached"
+    elif [ "$LATEST" -eq 0 ]; then
+        echo "[resubmit] no checkpoint written yet, not resubmitting"
+    else
+        EXCL=$(flaky_nodes)
+        NEXT_ID=$(sbatch --parsable --chdir="$WORKDIR" ${EXCL:+--exclude="$EXCL"} --export=ALL,RESUBMIT_COUNT=$NEXT "$SELF") \
+            && echo "$NEXT_ID" > "$SUCCESSOR" && echo "[resubmit] submitted job $NEXT_ID${EXCL:+ (excluding $(scontrol show hostnames "$EXCL" | wc -l) recently flaky nodes)}"
+    fi
+fi
+
 ########## Network logs: compress + summarize ##########
 if [ "$NETLOG" -ge 1 ]; then
     if [ "$SUMMARIZE" = 1 ]; then
@@ -224,24 +275,6 @@ if [ "$NETLOG" -ge 1 ]; then
     if [ -d "$NETLOG_DIR/nccl-inspector" ]; then
         du -sh "$NETLOG_DIR/nccl-inspector" 2>/dev/null
         find "$NETLOG_DIR/nccl-inspector" -name '*.log' -print0 | xargs -0 -r -P 32 -n 4 gzip -1
-    fi
-fi
-
-########## Auto-resubmit (train mode) ##########
-# Only after a clean exit (Megatron saves and exits before the wall time), so a crash
-# never turns into a resubmission loop.
-if [ "$RESUBMIT" = true ] && [ "$SRUN_RC" -eq 0 ]; then
-    LATEST=$(cat "$RUN_DIR/checkpoints/latest_checkpointed_iteration.txt" 2>/dev/null || echo 0)
-    NEXT=$((RESUBMIT_COUNT + 1))
-    echo "[resubmit] latest_iter=$LATEST target=$TRAIN_ITERS attempt=$NEXT/$MAX_RESUBMITS"
-    if [ "$LATEST" -ge "$TRAIN_ITERS" ]; then
-        echo "[resubmit] training complete"
-    elif [ "$NEXT" -gt "$MAX_RESUBMITS" ]; then
-        echo "[resubmit] MAX_RESUBMITS reached"
-    elif [ "$LATEST" -eq 0 ]; then
-        echo "[resubmit] no checkpoint written by this job, not resubmitting"
-    else
-        sbatch --chdir="$WORKDIR" --export=ALL,RESUBMIT_COUNT=$NEXT "$SELF"
     fi
 fi
 exit $SRUN_RC
