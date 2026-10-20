@@ -119,10 +119,12 @@ What healthy looks like:
 
 ## Risks and open decisions
 
-1. **Node count** (your call): 8 nodes is the configuration verified end to end. 16 nodes would finish ~4
-   weeks sooner for ~10% more node-hours; 32 nodes ~6 weeks sooner for ~15% more, with the most
-   exposed communication. Bigger jobs may wait longer in the capped queue. MBS 2 does not fit even at 32
-   nodes (OOM). The first 64-node test died from a node failure; it is resubmitted (3705268).
+1. **Node count — decided: 8 nodes** (2026-10-20, to save node-hours). Scaling measured with mock
+   data at GBS 2560: 16 nodes 91–94% efficiency, 32 nodes ~87% (91% of 16), 64 nodes ~71%; each doubling
+   costs node-hours. MBS 2 does not fit with this stack: ZeRO-1 + PP 2 runs out of activation memory, and
+   ZeRO-2/3 (Megatron-FSDP) breaks with PP (shared MTP embedding) and with the TE CUDA graphs, while
+   PP 1 + ZeRO-3 runs out of memory at MBS 2 (all 40 layers + both logit tensors on one GPU). Details:
+   WORKLOG.md. Switching later still works (`./launch.sh train 16 1T`, tested).
 2. **Clariden instability**: ~80 nodes keep dropping out of Slurm and kill jobs. They are excluded
    automatically (91% of such events avoided in a backtest), but expect occasional requeues. Each one
    loses ≤ 100 steps.

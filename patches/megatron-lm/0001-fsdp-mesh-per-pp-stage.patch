@@ -1,0 +1,34 @@
+# Patch: Megatron-FSDP device mesh per pipeline stage
+#
+# Problem:   with pipeline parallelism, Megatron-FSDP (use_megatron_fsdp, ZeRO-2/3) fails while
+#            wrapping the model: _get_dp_tp_mesh rearranges torch.arange(world_size) as
+#            (dp_cp ep tp), but world = pp * dp_cp * ep * tp ("Shape mismatch, 8 != 4", job 3705415).
+# What:      build the mesh from this rank's pipeline stage, the contiguous block of
+#            dp_cp*ep*tp ranks containing it (PP is the outermost dimension of the default rank
+#            order). Unchanged for PP=1.
+# Porting:   _get_dp_tp_mesh in megatron/core/distributed/fsdp/mcore_fsdp_adapter.py. Drop when
+#            upstream supports FSDP with PP > 1.
+#
+diff --git a/megatron/core/distributed/fsdp/mcore_fsdp_adapter.py b/megatron/core/distributed/fsdp/mcore_fsdp_adapter.py
+index 3ccd9f932..ae79a9c0a 100644
+--- a/megatron/core/distributed/fsdp/mcore_fsdp_adapter.py
++++ b/megatron/core/distributed/fsdp/mcore_fsdp_adapter.py
+@@ -557,9 +557,17 @@ def _get_dp_tp_mesh(dp_cp_group, tp_group, ep_size=1):
+     world_size = dist.get_world_size()
+ 
+     tp_size = dist.get_world_size(tp_group) if tp_group is not None else 1
++    # With pipeline parallelism the (dp_cp, ep, tp) ranks of one stage are a contiguous block of
++    # the world (PP is the outermost dimension of the default rank order): build the mesh from
++    # this stage's block instead of the whole world.
++    stage_size = dp_cp_group.size() * ep_size * tp_size
++    assert world_size % stage_size == 0, (
++        f"[Megatron-FSDP] world size {world_size} is not a multiple of dp_cp*ep*tp={stage_size}."
++    )
++    stage_start = (dist.get_rank() // stage_size) * stage_size
+     # TODO: Supports configurable (dp, cp, ep, tp) order.
+     mesh = einops.rearrange(
+-        torch.arange(world_size),
++        torch.arange(stage_start, stage_start + stage_size),
+         "(dp_cp ep tp) -> ep dp_cp tp",
+         dp_cp=dp_cp_group.size(),
+         tp=tp_size,
