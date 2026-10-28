@@ -6,6 +6,8 @@ Writes, per run:
                           size class its mean ops, GB and kernel seconds per member per step
   data/placement_<run>.csv  share of each op class completing in each tenth of the step (rank 0's node)
 coll_exec_time_us is GPU kernel time: it includes waiting for the slowest peer and overlaps compute.
+
+Other runs: extract_nccl.py --run NAME=<run dir under ROOT>/netlogs/job_<id> [--run ...] --steps A:B --out DIR
 """
 import bisect, collections, csv, glob, gzip, json, os, re, sys
 from multiprocessing import Pool
@@ -49,6 +51,19 @@ def one_rank(args):
     return host, comms, agg, place
 
 def main():
+    global RUNS, STEPS, DATA
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run", action="append", default=[], help="NAME=<path under ROOT>")
+    ap.add_argument("--steps", default=f"{STEPS[0]}:{STEPS[1]}")
+    ap.add_argument("--out", default=str(DATA))
+    args = ap.parse_args()
+    if args.run:
+        RUNS = dict(r.split("=", 1) for r in args.run)
+    STEPS = tuple(int(x) for x in args.steps.split(":"))
+    DATA = Path(args.out)
+    DATA.mkdir(parents=True, exist_ok=True)
     for run, sub in RUNS.items():
         bounds = step_bounds(run)
         files = sorted(glob.glob(f"{ROOT}/{sub}/nccl-inspector/*.log*"))

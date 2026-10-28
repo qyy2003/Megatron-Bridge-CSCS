@@ -1,0 +1,677 @@
+# Patch: Dion with compressed synchronization across optimizer instances (optional set "dion",
+# applied after the muon-zero1 set; launch.sh OPTIMIZER=dion-zero1)
+#
+# Problem:   with GLOBAL_DP>1 (ddp.num_distributed_optimizer_instances) the gradient shards of every
+#            matrix are all-reduced between the instances once per step (~4.6 GB per GPU per step at
+#            8 nodes, the simulated inter-datacenter link). Megatron-Core has no Dion.
+# What:      megatron/core/optimizer/dion.py: Dion (Ahn et al. 2025, arXiv:2504.05295; written from
+#            the paper) for the shard-aligned layer-wise optimizer: per matrix B = M + G,
+#            P = orth(B Q), R = B^T P, M = B - (1 - mu) P R^T, Q = colnorm(R), X -= lr scale P Q^T;
+#            equal-shape matrices batched (stacked momentum and Q, Cholesky QR2 in fp64 with a
+#            Householder fallback). Registered as emerging optimizer 'dion' (optimizer=dist_dion),
+#            non-matrix params on Adam as for Muon, update scale as muon_scale_mode (full rank =
+#            Muon's update size). ddp.layer_wise_skip_inter_instance_grad_sync: DDP does not
+#            all-reduce the matrix gradient shards across instances (with averaging collectives it
+#            divides them by N instead, so that they add up to the global mean); Dion keeps one
+#            momentum per instance and sums only B Q and B^T P over the inter-instance group,
+#            (m + n) r instead of m n values per matrix, exactly equivalent to Dion on the global
+#            gradient (see dion.py). Grad norm for clipping: sqrt(N sum_i |g_i|^2) over the
+#            instances (identical on all of them). Momenta averaged across instances before a
+#            checkpoint is saved (exact no-op); Q not checkpointed (same seed after a resume).
+#            OptimizerConfig dion_* fields; TP = expert TP = 1 only.
+# Porting:   _get_megatron_emerging_optimizer and LayerWiseDistributedOptimizer as changed by
+#            muon-zero1/0002; the inter-instance all-reduce loop in
+#            _ParamAndGradBucketGroup.start_grad_sync.
+#
+diff --git a/megatron/core/distributed/distributed_data_parallel_config.py b/megatron/core/distributed/distributed_data_parallel_config.py
+index 8c4ede3..53658e0 100644
+--- a/megatron/core/distributed/distributed_data_parallel_config.py
++++ b/megatron/core/distributed/distributed_data_parallel_config.py
+@@ -44,6 +44,13 @@ class DistributedDataParallelConfig:
+        enabled. Defaults to 1, which means DistOpt is across entire DP domain.
+     """
+ 
++    layer_wise_skip_inter_instance_grad_sync: bool = False
++    """With num_distributed_optimizer_instances > 1 and the layer-wise param layout: do not
++       all-reduce the gradient shards of layer-wise-managed (matrix) buckets across instances.
++       Only for an optimizer that synchronizes them itself (Dion: compressed low-rank factors);
++       any other optimizer would train each instance on its own gradients.
++    """
++
+     check_for_nan_in_grad: bool = False
+     """
+     If true, check for NaNs and Infs in gradients _before_ communication collective.
+diff --git a/megatron/core/distributed/param_and_grad_buffer.py b/megatron/core/distributed/param_and_grad_buffer.py
+index 50fa566..60c1b8b 100644
+--- a/megatron/core/distributed/param_and_grad_buffer.py
++++ b/megatron/core/distributed/param_and_grad_buffer.py
+@@ -746,6 +746,21 @@ class _ParamAndGradBucketGroup:
+                     local_data_view = self.cached_grad_buffer_shard_list[idx][
+                         self.intra_distributed_optimizer_instance_rank
+                     ]
++                    if (
++                        self.ddp_config.layer_wise_skip_inter_instance_grad_sync
++                        and bucket.params_list
++                        and getattr(
++                            bucket.params_list[0], 'is_managed_by_layer_wise_optimizer', False
++                        )
++                    ):
++                        # The optimizer (Dion) synchronizes these gradients across instances.
++                        # Keep what the skipped all-reduce would have summed: with an averaging
++                        # collective the instances' shards must add up to the global mean.
++                        if reduce_op == torch.distributed.ReduceOp.AVG:
++                            local_data_view.div_(
++                                self.ddp_config.num_distributed_optimizer_instances
++                            )
++                        continue
+ 
+                     torch.distributed.all_reduce(
+                         local_data_view,
+diff --git a/megatron/core/optimizer/__init__.py b/megatron/core/optimizer/__init__.py
+index f79f2c6..7153f44 100644
+--- a/megatron/core/optimizer/__init__.py
++++ b/megatron/core/optimizer/__init__.py
+@@ -802,7 +802,7 @@ def _get_megatron_emerging_optimizer(
+     # params is configurable via ``config.muon_scalar_optimizer`` (e.g., 'adam' or 'lion');
+     # deep-copy the registry defaults before rewriting so we never mutate shared state.
+     default_param_overrides = copy.deepcopy(_EMERGING_OPTIMIZERS[eopt_name].default_param_overrides)
+-    if eopt_name in ('muon', 'adaptive_muon'):
++    if eopt_name in ('muon', 'adaptive_muon', 'dion'):
+         for override in default_param_overrides.values():
+             if override.get('optimizer') in ('adam', 'lion'):
+                 override['optimizer'] = config.muon_scalar_optimizer
+@@ -833,6 +833,7 @@ def _get_megatron_emerging_optimizer(
+     # Optimizer instances (num_distributed_optimizer_instances > 1): every instance shards over
+     # its intra-instance groups and the gradient shards are all-reduced across instances (DDP).
+     layer_wise_grad_stats_group = None
++    layer_wise_inter_instance_norm_group = None
+     distributed_optimizer_instance_id = 0
+     if use_separate_distributed_optimizer and (
+         model_chunks[0].ddp_config.num_distributed_optimizer_instances > 1
+@@ -842,6 +843,17 @@ def _get_megatron_emerging_optimizer(
+         )
+         distributed_optimizer_instance_id = get_pg_rank(instance_groups['inter_dist_opt_group'])
+         layer_wise_grad_stats_group = instance_groups['intra_dist_opt_group']
++        if eopt_name == 'dion':
++            # Dion matrices hold per-instance gradients (no cross-instance all-reduce).
++            layer_wise_inter_instance_norm_group = instance_groups['inter_dist_opt_group']
++    if (
++        getattr(getattr(model_chunks[0], 'ddp_config', None), 'layer_wise_skip_inter_instance_grad_sync', False)
++        and eopt_name != 'dion'
++    ):
++        raise ValueError(
++            "ddp.layer_wise_skip_inter_instance_grad_sync leaves the matrix gradients "
++            f"unsynchronized across optimizer instances; only Dion handles that, not '{eopt_name}'."
++        )
+     if use_separate_distributed_optimizer and any(
+         # A separate DistributedOptimizer with byte-level sharding handles any group
+         # whose optimizer is not the primary emerging optimizer (stored in ``eopt_name``,
+@@ -981,6 +993,7 @@ def _get_megatron_emerging_optimizer(
+             model_chunks=model_chunks,
+             grad_stats_group=layer_wise_grad_stats_group,
+             distributed_optimizer_instance_id=distributed_optimizer_instance_id,
++            inter_instance_norm_group=layer_wise_inter_instance_norm_group,
+         )
+         # LayerWise owns Muon-managed params; DistOpt instances in ``results``
+         # own the rest. Chain them so the training loop sees one optimizer.
+diff --git a/megatron/core/optimizer/dion.py b/megatron/core/optimizer/dion.py
+new file mode 100644
+index 0000000..db494dc
+--- /dev/null
++++ b/megatron/core/optimizer/dion.py
+@@ -0,0 +1,380 @@
++"""Dion for the layer-wise distributed optimizer, with compressed sync across optimizer instances.
++
++Dion: K. Ahn, B. Xu, N. Abreu, J. Langford, "Dion: Distributed Orthonormalized Updates",
++arXiv:2504.05295. Written from the paper's algorithm for Megatron-Core's shard-aligned layer-wise
++optimizer (every rank holds whole matrices); not derived from the authors' package.
++
++Per weight matrix X (m x n) with rank r, momentum M (m x n) and right factor Q (n x r):
++
++    B = M + G
++    P = orthonormalize(B Q)              m x r
++    R = B^T P                            n x r
++    M = B - (1 - mu) P R^T               error feedback: what the rank-r update did not take
++    Q = R / ||R||_columns
++    X = X (1 - lr wd) - lr scale P Q^T
++
++Optimizer instances (ddp.num_distributed_optimizer_instances = N > 1, launch.sh GLOBAL_DP). Inside
++an instance DDP reduce-scatters the gradients as usual, so a rank holds its instance's gradient of
++the whole matrices it owns. With ddp.layer_wise_skip_inter_instance_grad_sync these gradients are
++not all-reduced across instances: instance i holds g_i, and sum_i g_i is the global mean gradient
++(DDP pre-scales by 1 / total DP size, or with averaging collectives divides each instance's mean by
++N in place of the skipped all-reduce). Each instance keeps its own momentum M_i. Only B_i Q and
++B_i^T P are summed over the inter-instance group, and each instance subtracts (1 - mu) P R^T / N.
++Then sum_i M_i is exactly the momentum of single-instance Dion on the global mean gradient, and P,
++Q and the weight update, computed from summed quantities only, are the same on every instance.
++Cross-instance traffic per matrix: (m + n) r values instead of m n.
++
++Only sum_i M_i enters the algorithm, so the momenta may be replaced by their mean at any time
++without changing it. That is done before a checkpoint is saved: the instances then hold identical
++state and only instance 0 writes it, as for every other optimizer. Q is a warm start for the power
++iteration and not saved; it is re-initialized after a resume (same seed on every instance).
++
++Speed: matrices of equal shape (and param group) form a run whose momenta and Q live in stacked
++tensors (``state["momentum_buffer"]`` are views of the stack), so the products are batched; P is
++orthonormalized by Cholesky QR (two passes, fp64), with Householder QR only for rank-deficient
++matrices; element-wise work uses multi-tensor ops.
++"""
++
++import logging
++import math
++from typing import Dict, List, Optional, Tuple
++
++import torch
++from torch.optim.optimizer import Optimizer
++
++logger = logging.getLogger(__name__)
++
++_COMM_DTYPES = {"fp32": torch.float32, "bf16": torch.bfloat16}
++
++
++def dion_scale_factor(size_out: int, size_in: int, mode: str) -> float:
++    """Update scale, with the conventions of emerging_optimizers' Muon (``get_muon_scale_factor``).
++
++    With "spectral" a full-rank Dion update has the RMS of a Muon update, since at full rank and a
++    converged power iteration P Q^T is the polar factor U V^T that Muon's Newton-Schulz computes.
++    """
++    if mode == "spectral":
++        return max(size_out, size_in) ** 0.5
++    if mode == "shape_scaling":
++        return max(1.0, size_out / size_in) ** 0.5
++    if mode == "unit_rms_norm":
++        return (size_out / size_in) ** 0.5
++    raise ValueError(f"Invalid Dion scale mode: {mode}")
++
++
++def orthonormalize(p: torch.Tensor) -> torch.Tensor:
++    """Orthonormal columns spanning those of each p[i] (batch k x m x r, m >= r), fp32 result.
++
++    Cholesky QR, two passes in fp64 (~40x faster than batched Householder QR here). Matrices whose
++    Gram matrix is singular (e.g. all zero, or an expert gradient of rank < r) or whose result is
++    not orthonormal to 1e-4 fall back to Householder QR. Column signs may differ from
++    Householder's; Dion is invariant to them.
++    """
++    x = p.double()
++    eye = torch.eye(p.shape[2], dtype=x.dtype, device=x.device)
++    ok = torch.ones(p.shape[0], dtype=torch.bool, device=p.device)
++    for _ in range(2):
++        chol, info = torch.linalg.cholesky_ex(x.mT @ x)
++        ok &= info == 0
++        chol = torch.where(ok[:, None, None], chol, eye)
++        x = torch.linalg.solve_triangular(chol, x.mT, upper=False).mT
++    ok &= ((x.mT @ x - eye).abs().amax(dim=(1, 2)) < 1e-4) & torch.isfinite(x).all(dim=(1, 2))
++    out = x.float()
++    if not bool(ok.all()):
++        bad = (~ok).nonzero().flatten()
++        out[bad] = torch.linalg.qr(p[bad].float(), mode="reduced")[0]
++    return out
++
++
++class Dion(Optimizer):
++    """Dion for 2-D weight matrices held whole on this rank (TP = expert TP = 1).
++
++    Args:
++        params: parameters or param groups (fp32 main params; each 2-D).
++        lr, weight_decay: as for Muon (decoupled weight decay); updated by the LR scheduler.
++        mu: momentum / error-feedback factor.
++        rank_fraction: rank r = rank_fraction x min(m, n), rounded up to ``rank_multiple_of``.
++        scale_mode, extra_scale_factor: update scale (see :func:`dion_scale_factor`).
++        epsilon: added to the column norms of R.
++        comm_dtype: "bf16" or "fp32", dtype of P and R when summed across instances.
++        inter_instance_group: the group of this rank's peers in the other optimizer instances
++            (None or size 1: no cross-instance reduction; the gradients are already global).
++        max_comm_bucket_numel: P + R values per bucket; buckets bound the memory of the
++            factors and give 2 collectives per bucket and step.
++        q_seed: seed of the initial Q (per matrix: q_seed + its position on this rank).
++        sync_check_interval: every this many steps, compare a checksum of the parameters across
++            instances and log the largest difference (0 = off).
++    """
++
++    def __init__(
++        self,
++        params,
++        lr: float = 3e-4,
++        mu: float = 0.95,
++        weight_decay: float = 0.0,
++        rank_fraction: float = 0.25,
++        rank_multiple_of: int = 8,
++        scale_mode: str = "spectral",
++        extra_scale_factor: float = 1.0,
++        epsilon: float = 1e-8,
++        comm_dtype: str = "bf16",
++        inter_instance_group: Optional[torch.distributed.ProcessGroup] = None,
++        max_comm_bucket_numel: int = 2**27,
++        q_seed: int = 1234,
++        sync_check_interval: int = 0,
++    ) -> None:
++        if not 0.0 < rank_fraction <= 1.0:
++            raise ValueError(f"rank_fraction must be in (0, 1], got {rank_fraction}")
++        if not 0.0 <= mu < 1.0:
++            raise ValueError(f"mu must be in [0, 1), got {mu}")
++        if comm_dtype not in _COMM_DTYPES:
++            raise ValueError(f"comm_dtype must be one of {sorted(_COMM_DTYPES)}, got {comm_dtype}")
++        dion_scale_factor(2, 1, scale_mode)  # validate
++        super().__init__(params, dict(lr=lr, mu=mu, weight_decay=weight_decay))
++        for group in self.param_groups:
++            for p in group["params"]:
++                if p.dim() != 2:
++                    raise ValueError(f"Dion handles 2-D matrices only, got shape {tuple(p.shape)}")
++        self.rank_fraction = rank_fraction
++        self.rank_multiple_of = max(1, rank_multiple_of)
++        self.scale_mode = scale_mode
++        self.extra_scale_factor = extra_scale_factor
++        self.epsilon = epsilon
++        self.comm_dtype = _COMM_DTYPES[comm_dtype]
++        self.max_comm_bucket_numel = max_comm_bucket_numel
++        self.q_seed = q_seed
++        self.sync_check_interval = sync_check_interval
++        self.inter_group = inter_instance_group
++        self.num_instances = 1
++        if inter_instance_group is not None:
++            self.num_instances = torch.distributed.get_world_size(inter_instance_group)
++            if self.num_instances == 1:
++                self.inter_group = None
++        # Per run of equal-shape matrices: stacked momentum and Q. Q is kept outside
++        # ``self.state``: checkpoints map every state tensor onto the parameter's shape, which Q
++        # (n x r) does not have. ``_q`` maps a param to its Q (a view of the stack).
++        self._runs: Dict[Tuple[int, ...], dict] = {}
++        self._q: Dict[torch.Tensor, torch.Tensor] = {}
++        self._num_steps = 0
++
++    # ------------------------------------------------------------------ helpers
++    def rank_for(self, p: torch.Tensor) -> int:
++        """Rank r of the update of matrix ``p``."""
++        k = min(p.shape)
++        r = math.ceil(self.rank_fraction * k)
++        r = math.ceil(r / self.rank_multiple_of) * self.rank_multiple_of
++        return max(1, min(k, r))
++
++    def _init_group(self, group: dict, skip_non_grad_params: bool = True) -> None:
++        """Create the momentum (also for parameters without gradients, for checkpoint templates)."""
++        for p in group["params"]:
++            if skip_non_grad_params and p.grad is None:
++                continue
++            state = self.state[p]
++            if "momentum_buffer" not in state:
++                state["momentum_buffer"] = torch.zeros_like(p, dtype=torch.float32)
++
++    def _all_reduce(self, t: torch.Tensor) -> None:
++        if self.inter_group is not None:
++            torch.distributed.all_reduce(t, op=torch.distributed.ReduceOp.SUM, group=self.inter_group)
++
++    def _items(self) -> List[Tuple[int, int, torch.Tensor, dict]]:
++        """(position on this rank, group position, param, group); the same on every instance."""
++        items, index = [], 0
++        for gidx, group in enumerate(self.param_groups):
++            for p in group["params"]:
++                items.append((index, gidx, p, group))
++                index += 1
++        return items
++
++    def _check_alignment(self, items) -> None:
++        """Peers in the other instances must own the same matrices in the same order."""
++        sig = torch.zeros(3, dtype=torch.float64, device=items[0][2].device if items else "cuda")
++        for index, _, p, _ in items:
++            sig[0] += 1
++            sig[1] += p.numel()
++            sig[2] += (index + 1) * (p.shape[0] * 7919 + p.shape[1])
++        hi, lo = sig.clone(), sig.clone()
++        torch.distributed.all_reduce(hi, op=torch.distributed.ReduceOp.MAX, group=self.inter_group)
++        torch.distributed.all_reduce(lo, op=torch.distributed.ReduceOp.MIN, group=self.inter_group)
++        if not torch.equal(hi, lo):
++            raise RuntimeError(
++                "Dion: the matrices owned by this rank differ from those of its peers in the other "
++                f"optimizer instances (signature here {sig.tolist()}, max {hi.tolist()}, min {lo.tolist()})"
++            )
++
++    def _plan(self, items) -> List[List[List[tuple]]]:
++        """Buckets of runs: a run = consecutive items of equal (shape, group); deterministic."""
++        order = sorted(items, key=lambda it: (it[2].shape[0], it[2].shape[1], it[1], it[0]))
++        runs: List[List[tuple]] = []
++        for item in order:
++            key = (item[2].shape[0], item[2].shape[1], item[1])
++            if runs and (runs[-1][0][2].shape[0], runs[-1][0][2].shape[1], runs[-1][0][1]) == key:
++                runs[-1].append(item)
++            else:
++                runs.append([item])
++        buckets, bucket, numel = [], [], 0
++        for run in runs:
++            m, n = run[0][2].shape
++            r = self.rank_for(run[0][2])
++            # split a run that alone exceeds the bucket size
++            per = max(1, self.max_comm_bucket_numel // ((m + n) * r))
++            for start in range(0, len(run), per):
++                piece = run[start : start + per]
++                size = len(piece) * (m + n) * r
++                if bucket and numel + size > self.max_comm_bucket_numel:
++                    buckets.append(bucket)
++                    bucket, numel = [], 0
++                bucket.append(piece)
++                numel += size
++        if bucket:
++            buckets.append(bucket)
++        return buckets
++
++    def _run_storage(self, run) -> dict:
++        """Stacked momentum and Q of a run; (re)built when the state tensors are not its views
++        (first step, or after load_state_dict replaced them)."""
++        key = tuple(it[0] for it in run)
++        params = [it[2] for it in run]
++        st = self._runs.get(key)
++        m, n = params[0].shape
++        r = self.rank_for(params[0])
++        if st is None:
++            q = torch.empty(len(run), n, r, device=params[0].device, dtype=torch.float32)
++            for i, (index, _, p, _) in enumerate(run):
++                gen = torch.Generator(device=p.device)
++                gen.manual_seed(self.q_seed + index)
++                q[i] = torch.randn(n, r, device=p.device, dtype=torch.float32, generator=gen)
++            q /= q.norm(dim=1, keepdim=True)
++            st = {"M": None, "Q": q}
++            self._runs[key] = st
++            for i, p in enumerate(params):
++                self._q[p] = q[i]
++        stack = st["M"]
++        views_ok = stack is not None and all(
++            self.state[p].get("momentum_buffer") is not None
++            and self.state[p]["momentum_buffer"].data_ptr() == stack[i].data_ptr()
++            for i, p in enumerate(params)
++        )
++        if not views_ok:
++            stack = torch.zeros(len(run), m, n, device=params[0].device, dtype=torch.float32)
++            for i, p in enumerate(params):
++                old = self.state[p].get("momentum_buffer")
++                if old is not None:
++                    stack[i].copy_(old)
++                self.state[p]["momentum_buffer"] = stack[i]
++            st["M"] = stack
++        return st
++
++    # ------------------------------------------------------------------ step
++    @torch.no_grad()
++    def step(self, closure=None):
++        """One Dion step for every matrix of this rank (2 cross-instance collectives per bucket)."""
++        loss = None
++        if closure is not None:
++            with torch.enable_grad():
++                loss = closure()
++        items = self._items()
++        if self._num_steps == 0 and self.inter_group is not None:
++            self._check_alignment(items)
++        for bucket in self._plan(items):
++            self._step_bucket(bucket)
++        self._num_steps += 1
++        if (
++            self.sync_check_interval
++            and self.inter_group is not None
++            and self._num_steps % self.sync_check_interval == 0
++        ):
++            self.check_instances_in_sync()
++        return loss
++
++    def _step_bucket(self, bucket) -> None:
++        device = bucket[0][0][2].device
++        dims = []
++        for run in bucket:
++            m, n = run[0][2].shape
++            dims.append((len(run), m, n, self.rank_for(run[0][2])))
++        p_flat = torch.empty(sum(k * m * r for k, m, _, r in dims), device=device, dtype=self.comm_dtype)
++        r_flat = torch.empty(sum(k * n * r for k, _, n, r in dims), device=device, dtype=self.comm_dtype)
++        storages = [self._run_storage(run) for run in bucket]
++
++        # 1) B = M + G (in place in M), P = B Q
++        offset, p_views = 0, []
++        for run, st, (k, m, n, r) in zip(bucket, storages, dims):
++            with_grad = [(i, it[2].grad) for i, it in enumerate(run) if it[2].grad is not None]
++            if with_grad:
++                torch._foreach_add_([st["M"][i] for i, _ in with_grad], [g for _, g in with_grad])
++            view = p_flat[offset : offset + k * m * r].view(k, m, r)
++            if self.comm_dtype == torch.float32:
++                torch.bmm(st["M"], st["Q"], out=view)
++            else:
++                view.copy_(torch.bmm(st["M"], st["Q"]))
++            p_views.append(view)
++            offset += k * m * r
++        self._all_reduce(p_flat)
++
++        # 2) orthonormalize P; 3) R = B^T P
++        offset, p_orth, r_views = 0, [], []
++        for st, view, (k, m, n, r) in zip(storages, p_views, dims):
++            p_k = orthonormalize(view.float())
++            p_orth.append(p_k)
++            r_view = r_flat[offset : offset + k * n * r].view(k, n, r)
++            if self.comm_dtype == torch.float32:
++                torch.bmm(st["M"].mT, p_k, out=r_view)
++            else:
++                r_view.copy_(torch.bmm(st["M"].mT, p_k))
++            r_views.append(r_view)
++            offset += k * n * r
++        self._all_reduce(r_flat)
++
++        # 4) error feedback, new Q, weight update
++        for run, st, p_k, r_view, (k, m, n, r) in zip(bucket, storages, p_orth, r_views, dims):
++            group = run[0][3]
++            r_k = r_view.float()
++            st["M"].baddbmm_(p_k, r_k.mT, alpha=-(1.0 - group["mu"]) / self.num_instances)
++            norms = r_k.norm(dim=1, keepdim=True)
++            # A zero column (e.g. an expert without tokens in its first steps) keeps its old Q
++            # column; a zero Q column would stay zero for good.
++            st["Q"].copy_(torch.where(norms > self.epsilon, r_k / (norms + self.epsilon), st["Q"]))
++            params = [it[2] for it in run]
++            lr = group["lr"]
++            weight_decay = group.get("weight_decay", 0.0)
++            if weight_decay:
++                torch._foreach_mul_(params, 1.0 - lr * weight_decay)
++            alpha = -lr * dion_scale_factor(m, n, self.scale_mode) * self.extra_scale_factor
++            per = max(1, self.max_comm_bucket_numel // (m * n))  # bound the P Q^T temporary
++            for start in range(0, k, per):
++                delta = torch.bmm(p_k[start : start + per], st["Q"][start : start + per].mT)
++                torch._foreach_add_(params[start : start + per], list(delta.unbind(0)), alpha=alpha)
++
++    # ------------------------------------------------------------------ instances
++    @torch.no_grad()
++    def average_momentum_across_instances(self) -> None:
++        """Replace every instance's momentum by the mean over instances (an exact no-op for the
++        algorithm, which depends only on their sum); called before a checkpoint is saved."""
++        if self.inter_group is None:
++            return
++        for _, _, p, _ in self._items():
++            state = self.state.get(p)
++            if state and "momentum_buffer" in state:
++                self._all_reduce(state["momentum_buffer"])
++                state["momentum_buffer"].div_(self.num_instances)
++
++    @torch.no_grad()
++    def check_instances_in_sync(self) -> float:
++        """Largest difference over the instances of a checksum of this rank's matrices."""
++        items = self._items()
++        device = items[0][2].device if items else torch.device("cuda")
++        s = torch.zeros(2, dtype=torch.float64, device=device)
++        for _, _, p, _ in items:
++            s[0] += p.double().sum()
++            s[1] += p.double().square().sum()
++        hi, lo = s.clone(), s.clone()
++        torch.distributed.all_reduce(hi, op=torch.distributed.ReduceOp.MAX, group=self.inter_group)
++        torch.distributed.all_reduce(lo, op=torch.distributed.ReduceOp.MIN, group=self.inter_group)
++        diff = float((hi - lo).abs().max())
++        if diff != 0.0:
++            logger.warning(f"Dion instance sync check after step {self._num_steps}: checksum difference {diff:.3e}")
++        elif torch.distributed.get_rank() == 0:
++            logger.info(f"Dion instance sync check after step {self._num_steps}: parameters identical across instances")
++        return diff
+diff --git a/megatron/core/optimizer/emerging_optimizers.py b/megatron/core/optimizer/emerging_optimizers.py
+index 53ac956..6c15bf7 100644
+--- a/megatron/core/optimizer/emerging_optimizers.py
++++ b/megatron/core/optimizer/emerging_optimizers.py
+@@ -19,6 +19,7 @@ from torch.optim.optimizer import ParamsT
+ from megatron.core.process_groups_config import ProcessGroupCollection
+ from megatron.core.utils import get_pg_rank, get_pg_size, log_single_rank
+ 
++from .dion import Dion
+ from .optimizer_config import ParamKey, ParamPredicate
+ 
+ try:
+@@ -448,6 +449,40 @@ def _adaptive_muon_config_to_kwargs(config, model_chunks, pg_collection) -> Dict
+     return kwargs
+ 
+ 
++def _dion_config_to_kwargs(config, model_chunks, pg_collection) -> Dict[str, Any]:
++    """Convert OptimizerConfig to Dion constructor kwargs (megatron/core/optimizer/dion.py)."""
++    ddp_config = getattr(model_chunks[0], 'ddp_config', None)
++    num_instances = ddp_config.num_distributed_optimizer_instances if ddp_config else 1
++    inter_instance_group = None
++    if num_instances > 1:
++        if not ddp_config.layer_wise_skip_inter_instance_grad_sync:
++            raise ValueError(
++                "Dion with num_distributed_optimizer_instances > 1 synchronizes the matrix "
++                "gradients across instances itself: set "
++                "ddp.layer_wise_skip_inter_instance_grad_sync=True."
++            )
++        inter_instance_group = ProcessGroupCollection.setup_process_groups_for_optimizer(
++            pg_collection, model_chunks, use_gloo_process_groups=False
++        )['inter_dist_opt_group']
++    tp_size = get_pg_size(pg_collection.tp)
++    expt_tp_size = get_pg_size(getattr(pg_collection, 'expt_tp', None) or pg_collection.tp)
++    if tp_size > 1 or expt_tp_size > 1:
++        raise ValueError("Dion supports tensor parallel size 1 only (whole matrices per rank).")
++    return dict(
++        lr=config.lr,
++        mu=config.dion_mu,
++        weight_decay=config.weight_decay,
++        rank_fraction=config.dion_rank_fraction,
++        rank_multiple_of=config.dion_rank_multiple_of,
++        scale_mode=config.muon_scale_mode,
++        extra_scale_factor=config.muon_extra_scale_factor,
++        comm_dtype=config.dion_comm_dtype,
++        inter_instance_group=inter_instance_group,
++        max_comm_bucket_numel=config.dion_max_comm_bucket_numel,
++        sync_check_interval=config.dion_sync_check_interval,
++    )
++
++
+ def _default_adam_based_eopt_config_to_kwargs(
+     eopt_name, config, model_chunks, pg_collection
+ ) -> Dict[str, Any]:
+@@ -474,6 +509,18 @@ _EMERGING_OPTIMIZERS.update(
+                 ): {'optimizer': 'adam'}
+             },
+         ),
++        "dion": EmergingOptimizerEntry(
++            optimizer_cls=Dion,
++            init_state_fn=_eopt_init_state_fn,
++            config_to_kwargs=_dion_config_to_kwargs,
++            default_param_overrides={
++                ParamKey(
++                    predicate=ParamPredicate(
++                        name="nonlinear_or_embedding", fn=_is_nonlinear_or_embedding
++                    )
++                ): {'optimizer': 'adam'}
++            },
++        ),
+         "adaptive_muon": EmergingOptimizerEntry(
+             optimizer_cls=TensorParallelAdaptiveMuon,
+             init_state_fn=_eopt_init_state_fn,
+diff --git a/megatron/core/optimizer/layer_wise_optimizer.py b/megatron/core/optimizer/layer_wise_optimizer.py
+index 1053ac1..02d074f 100644
+--- a/megatron/core/optimizer/layer_wise_optimizer.py
++++ b/megatron/core/optimizer/layer_wise_optimizer.py
+@@ -433,6 +433,7 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+         model_chunks: Optional[List] = None,
+         grad_stats_group: Optional[torch.distributed.ProcessGroup] = None,
+         distributed_optimizer_instance_id: int = 0,
++        inter_instance_norm_group: Optional[torch.distributed.ProcessGroup] = None,
+     ) -> None:
+         """
+         Initialize LayerWiseDistributedOptimizer.
+@@ -447,9 +448,14 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+                 None = the whole world. With several optimizer instances: the ranks of one
+                 instance (every Muon matrix is owned by one rank per instance).
+             distributed_optimizer_instance_id: this rank's optimizer instance.
++            inter_instance_norm_group: set when the gradients of this optimizer's params are
++                not all-reduced across optimizer instances (Dion): the instances' squared
++                gradient norms are then combined over this group, so that every instance clips
++                with the same factor.
+         """
+         self.grad_stats_group = grad_stats_group
+         self.distributed_optimizer_instance_id = distributed_optimizer_instance_id
++        self.inter_instance_norm_group = inter_instance_norm_group
+ 
+         self.pg_collection = pg_collection
+ 
+@@ -826,7 +832,18 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+         for optimizer in self.chained_optimizers:
+             grads_for_norm += optimizer.get_grads_for_grad_norm()
+         grad_norm = get_grad_norm_fp32(grads_for_norm, grad_stats_parallel_group=self.grad_stats_group)
+-        return grad_norm
++        return self._combine_instance_grad_norms(grad_norm)
++
++    def _combine_instance_grad_norms(self, grad_norm: float) -> float:
++        """Without a cross-instance gradient all-reduce (Dion), instance i holds g_i with
++        sum_i g_i = the global gradient. Use sqrt(N sum_i |g_i|^2): the true norm when the
++        instances agree, an upper bound otherwise; identical on all instances."""
++        if self.inter_instance_norm_group is None:
++            return grad_norm
++        n = get_pg_size(self.inter_instance_norm_group)
++        sq = torch.tensor([float(grad_norm) ** 2], dtype=torch.float64, device='cuda')
++        torch.distributed.all_reduce(sq, group=self.inter_instance_norm_group)
++        return math.sqrt(n * sq.item())
+ 
+     def has_grad_norm_group(self, grad_norm_group: str) -> bool:
+         """Whether any global rank owns params for a registered grad-norm group.
+@@ -864,7 +881,7 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+         for optimizer in self.chained_optimizers:
+             grads_for_norm += optimizer.get_grads_for_grad_norm(grad_norm_group)
+         grad_norm = get_grad_norm_fp32(grads_for_norm, grad_stats_parallel_group=self.grad_stats_group)
+-        return grad_norm
++        return self._combine_instance_grad_norms(grad_norm)
+ 
+     @torch.no_grad()
+     def count_zeros(self):
+@@ -948,6 +965,13 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+         Sharded state dict for torch_dist format checkpointing.
+         For fixed DP usage only, set replica_id to 0 for all ShardedTensor.
+         """
++        if not is_loading:
++            # Dion keeps one momentum per optimizer instance; make them identical (an exact
++            # no-op for the algorithm) so that the state instance 0 writes is the right one.
++            for optimizer in self.chained_optimizers:
++                inner = getattr(optimizer, 'optimizer', None)
++                if hasattr(inner, 'average_momentum_across_instances'):
++                    inner.average_momentum_across_instances()
+         sharded_state_dict = super().sharded_state_dict(
+             model_sharded_state_dict, is_loading, **kwargs
+         )
+diff --git a/megatron/core/optimizer/optimizer_config.py b/megatron/core/optimizer/optimizer_config.py
+index 24f9a03..6aecf97 100644
+--- a/megatron/core/optimizer/optimizer_config.py
++++ b/megatron/core/optimizer/optimizer_config.py
+@@ -289,6 +289,28 @@ class OptimizerConfig:
+     """Optimizer for nonlinear parameters (embeddings, biases, norms) when using muon.
+     One of 'adam' or 'lion'. Defaults to 'adam'."""
+ 
++    # Dion (optimizer='dion' / 'dist_dion'; megatron/core/optimizer/dion.py). Uses muon_scale_mode
++    # and muon_extra_scale_factor for the update scale and muon_scalar_optimizer for the
++    # non-matrix params.
++    dion_rank_fraction: float = 0.25
++    """Rank of the Dion update as a fraction of min(rows, cols) of each matrix."""
++
++    dion_rank_multiple_of: int = 8
++    """The Dion rank is rounded up to a multiple of this."""
++
++    dion_mu: float = 0.95
++    """Dion momentum / error-feedback factor."""
++
++    dion_comm_dtype: str = 'bf16'
++    """Dtype ('bf16' or 'fp32') of the low-rank factors summed across optimizer instances."""
++
++    dion_max_comm_bucket_numel: int = 2**27
++    """Low-rank factor values per Dion communication bucket (bounds their memory)."""
++
++    dion_sync_check_interval: int = 0
++    """Every this many steps, check that the Dion-managed parameters are identical across
++    optimizer instances (0 = off)."""
++
+     # Lion.
+     lion_beta1: float = 0.95
+     """First beta coefficient for Lion optimizer (used in sign update). Defaults to 0.95."""

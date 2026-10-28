@@ -134,7 +134,16 @@ OPTIMIZER=muon-zero1 GLOBAL_DP=2 MAX_STEPS=500 WALLTIME=04:00:00 MAX_RESUBMITS=0
 - `GLOBAL_DP=N` splits the nodes into N "datacenters" that each hold a full model replica
   (`ddp.num_distributed_optimizer_instances`): pipeline, expert all-to-all and the gradient
   reduce-scatter / parameter all-gather stay inside a datacenter, and the gradient shards are
-  all-reduced between datacenters once per step. Works with `adam` and `muon-zero1`.
+  all-reduced between datacenters once per step. Works with `adam`, `muon-zero1` and `dion-zero1`.
+- `OPTIMIZER=dion-zero1` (optional patch sets `muon-zero1` + `dion`; own implementation of Dion,
+  Ahn et al. 2025, in `megatron/core/optimizer/dion.py`): Dion for the weight matrices on the same
+  ZeRO-1 layout, Adam for the rest. With `GLOBAL_DP>1` it replaces the cross-datacenter gradient
+  all-reduce of the matrices: each datacenter keeps its own Dion momentum and only the rank-r
+  factors cross ((m+n)·r instead of m·n values per matrix; exactly equivalent to Dion on the global
+  gradient). `DION_RANK_FRACTION` [0.25], `DION_COMM_DTYPE` [bf16], `DION_SYNC_CHECK=N` (check every
+  N steps that the datacenters hold identical weights). Measured at 8 nodes: 3.0×/4.8× fewer
+  cross-datacenter bytes per GPU (stage 0/1) at r=1/4 and faster steps than Muon (WORKLOG.md);
+  unit tests: `SNAP=<snapshot> sbatch tests/run_dion_tests.sbatch`.
 - `PATCHES=set1,set2` applies optional patch sets `patches/optional/<set>/` to this job only (its own
   code snapshot, so jobs with different sets can run at the same time); see
   `patches/optional/README.md`.

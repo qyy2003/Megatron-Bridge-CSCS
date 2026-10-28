@@ -84,6 +84,15 @@
 #                       matrices, non-Muon params in a regular distributed optimizer. Applies the
 #                       optional patch set muon-zero1 (which also supports GLOBAL_DP>1). Run name
 #                       "-muon-zero1"
+#                       | dion-zero1: Dion (Ahn et al. 2025; patch set dion, own implementation) for the
+#                       weight matrices on the same ZeRO-1 layout, Adam for the rest. With GLOBAL_DP>1
+#                       the matrix gradients are not all-reduced between datacenters: each keeps its
+#                       own Dion momentum and only the rank-r factors (m+n)r per matrix cross, exactly
+#                       equivalent to Dion on the global gradient. Update scaled like Muon (full rank
+#                       = Muon's update size). Run name "-dion-zero1-r<fraction>"
+#   DION_RANK_FRACTION [0.25]  Dion rank r = fraction x min(rows, cols) of each matrix
+#   DION_COMM_DTYPE [bf16]     bf16 | fp32: dtype of the factors summed across datacenters
+#   DION_SYNC_CHECK [0]        every N steps compare the Dion matrices across datacenters (log)
 #   MAX_STEPS           stop the run at this step while the batch-size schedule and the LR schedule stay
 #                       those of the full token budget (a short run identical to the start of the long
 #                       one); train runs get "-max<N>" in their name, so they never share the full run's
@@ -121,10 +130,16 @@ EXCLUDE_FLAKY=${EXCLUDE_FLAKY:-1}
 PATCHES=${PATCHES:-}
 GLOBAL_DP=${GLOBAL_DP:-1}
 OPTIMIZER=${OPTIMIZER:-adam}
-case $OPTIMIZER in adam|muon|muon-zero1) ;; *) echo "OPTIMIZER must be adam, muon or muon-zero1"; exit 1 ;; esac
-if [ "$OPTIMIZER" = muon-zero1 ] && [[ ",$PATCHES," != *,muon-zero1,* ]]; then
-    PATCHES=${PATCHES:+$PATCHES,}muon-zero1
-fi
+case $OPTIMIZER in adam|muon|muon-zero1|dion-zero1) ;; *) echo "OPTIMIZER must be adam, muon, muon-zero1 or dion-zero1"; exit 1 ;; esac
+IMPLIED_SETS=""   # optional patch sets an OPTIMIZER needs (in this order, not repeated in the run name)
+case $OPTIMIZER in muon-zero1) IMPLIED_SETS="muon-zero1" ;; dion-zero1) IMPLIED_SETS="muon-zero1 dion" ;; esac
+for set in $IMPLIED_SETS; do
+    [[ ",$PATCHES," == *,$set,* ]] || PATCHES=${PATCHES:+$PATCHES,}$set
+done
+DION_RANK_FRACTION=${DION_RANK_FRACTION:-0.25}
+DION_COMM_DTYPE=${DION_COMM_DTYPE:-bf16}
+DION_SYNC_CHECK=${DION_SYNC_CHECK:-0}
+case $DION_COMM_DTYPE in bf16|fp32) ;; *) echo "DION_COMM_DTYPE must be bf16 or fp32"; exit 1 ;; esac
 for set in ${PATCHES//,/ }; do
     [ -d "$WORKDIR/patches/optional/$set" ] || { echo "PATCHES: no patch set patches/optional/$set"; exit 1; }
 done
@@ -225,12 +240,19 @@ fi
 if (( GBS % (MBS * DP) != 0 )); then echo "GBS=$GBS must be a multiple of MBS*DP=$((MBS * DP))"; exit 1; fi
 if [ "$OPTIMIZER" != adam ]; then
     [ "$OPTIMIZER" = muon ] && (( GLOBAL_DP > 1 )) && { echo "OPTIMIZER=muon with GLOBAL_DP>1: Megatron-Core's legacy layer-wise Muon has no optimizer instances; use OPTIMIZER=muon-zero1"; exit 1; }
-    OVERRIDES+=(optimizer.optimizer=dist_muon optimizer.muon_momentum=0.95 optimizer.muon_nesterov=true
+    if [ "$OPTIMIZER" = dion-zero1 ]; then OPT_NAME=dist_dion; else OPT_NAME=dist_muon; fi
+    OVERRIDES+=(optimizer.optimizer=$OPT_NAME optimizer.muon_momentum=0.95 optimizer.muon_nesterov=true
                 optimizer.muon_scale_mode=spectral optimizer.muon_num_ns_steps=5 optimizer.muon_scalar_optimizer=adam
                 ddp.use_distributed_optimizer=false optimizer.use_distributed_optimizer=false
                 ddp.overlap_param_gather=false optimizer.overlap_param_gather=false
                 comm_overlap.overlap_param_gather=false)
-    [ "$OPTIMIZER" = muon-zero1 ] && OVERRIDES+=(ddp.use_layer_wise_param_layout=true)
+    [ "$OPTIMIZER" = muon ] || OVERRIDES+=(ddp.use_layer_wise_param_layout=true)
+    if [ "$OPTIMIZER" = dion-zero1 ]; then
+        (( TP == 1 && ETP == 1 )) || { echo "OPTIMIZER=dion-zero1 needs TP=1 and ETP=1 (whole matrices per rank)"; exit 1; }
+        OVERRIDES+=(optimizer.dion_rank_fraction=$DION_RANK_FRACTION optimizer.dion_mu=0.95
+                    optimizer.dion_comm_dtype=$DION_COMM_DTYPE optimizer.dion_sync_check_interval=$DION_SYNC_CHECK)
+        (( GLOBAL_DP > 1 )) && OVERRIDES+=(ddp.layer_wise_skip_inter_instance_grad_sync=true)
+    fi
 fi
 if (( GLOBAL_DP > 1 )); then
     EXPT_DP=$(( NODES * 4 / (EP * ETP * PP) ))
@@ -340,9 +362,13 @@ TAG+="-mbs${MBS}-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}"
 [ "$DISPATCHER" != alltoall ] && TAG+="-$DISPATCHER"; [ "$EP_OVERLAP" = 1 ] && TAG+="-epov"
 GDP_TAG=""; (( GLOBAL_DP > 1 )) && GDP_TAG="-gdp$GLOBAL_DP"
 OPT_TAG=""; [ "$OPTIMIZER" != adam ] && OPT_TAG="-$OPTIMIZER"
-PTAG=""   # optional patch sets in the run name, except the one OPTIMIZER=muon-zero1 implies
+if [ "$OPTIMIZER" = dion-zero1 ]; then
+    OPT_TAG+="-r$DION_RANK_FRACTION"
+    if [ "$DION_COMM_DTYPE" = fp32 ]; then OPT_TAG+="-fp32comm"; fi
+fi
+PTAG=""   # optional patch sets in the run name, except those the OPTIMIZER implies
 for set in ${PATCHES//,/ }; do
-    [ "$OPTIMIZER" = muon-zero1 ] && [ "$set" = muon-zero1 ] && continue
+    [[ " $IMPLIED_SETS " == *" $set "* ]] && continue
     PTAG+="${PTAG:++}$set"
 done
 RUN_TAGS="${OPT_TAG}${GDP_TAG}${MAX_STEPS:+-max$MAX_STEPS}${PTAG:+-p$PTAG}"

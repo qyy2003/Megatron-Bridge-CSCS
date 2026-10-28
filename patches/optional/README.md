@@ -19,3 +19,10 @@ patches/optional/<set>/megatron-lm/NNNN-name.patch       # inside Megatron-Bridg
 Example: `PATCHES=my-change EXP_SUFFIX=a ./launch.sh train 8 1T` next to the same command
 without `PATCHES`. A change that is only a config value (e.g. the optimizer: Megatron-Core
 already has Muon, `optimizer.optimizer=muon` + `optimizer.muon_*`) needs no patch: use `EXTRA=`.
+
+Sets in this repository:
+
+| Set | What | Used by |
+|---|---|---|
+| `muon-zero1` | ZeRO-1 for Megatron-Core's layer-wise Muon (shard-aligned buffers) and optimizer instances (GLOBAL_DP) | `OPTIMIZER=muon-zero1` |
+| `dion` | Dion (own implementation) with compressed cross-instance sync; needs `muon-zero1` first | `OPTIMIZER=dion-zero1` |
