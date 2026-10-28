@@ -1,0 +1,174 @@
+# Patch: optimizer instances (GLOBAL_DP) for ZeRO-1 Muon (part of the muon-zero1 set)
+#
+# Problem:   the layer-wise + DistributedOptimizer split path (shard-aligned layout, patch 0001)
+#            asserts num_distributed_optimizer_instances == 1 (instance id hard-coded to 0), and
+#            LayerWiseDistributedOptimizer rejects instances altogether. Simulated inter-datacenter
+#            training (launch.sh GLOBAL_DP) needs them.
+# What:      factory: instance id from the inter-instance group, passed to the DistOpt (non-Muon)
+#            sub-optimizer and to LayerWise, plus the intra-instance group for gradient statistics.
+#            LayerWise with the shard-aligned layout: shard / all-gather over the intra-instance
+#            dense and expert groups (each instance owns whole matrices over its ranks; DDP
+#            reduce-scatters inside the instance and all-reduces the shards across instances);
+#            grad norm / zero count / group checks reduced over the instance's ranks (a global
+#            reduction would count every matrix once per instance); optimizer-state replica_id
+#            carries the instance id so only instance 0 writes it. Legacy layout still refuses.
+# Porting:   _get_megatron_emerging_optimizer in megatron/core/optimizer/__init__.py and
+#            LayerWiseDistributedOptimizer.__init__/get_grad_norm/_get_grad_norm_for_group/
+#            count_zeros/has_grad_norm_group/sharded_state_dict.
+#
+diff --git a/megatron/core/optimizer/__init__.py b/megatron/core/optimizer/__init__.py
+index 70f757f28..f79f2c65a 100644
+--- a/megatron/core/optimizer/__init__.py
++++ b/megatron/core/optimizer/__init__.py
+@@ -830,14 +830,18 @@ def _get_megatron_emerging_optimizer(
+     distopt_process_groups = None
+     distopt_per_model_buffers = None
+     use_separate_distributed_optimizer = ddp_uses_distributed_optimizer and use_layer_wise
+-    if use_separate_distributed_optimizer:
+-        ddp_config = model_chunks[0].ddp_config
+-        assert ddp_config.num_distributed_optimizer_instances == 1, (
+-            "Layer-wise + DistributedOptimizer split path does not yet support "
+-            "num_distributed_optimizer_instances > 1: distributed_optimizer_instance_id "
+-            "is hardcoded to 0 in this path. Disable use_layer_wise_param_layout to "
+-            "fall back to the legacy LayerWise ping-pong path."
++    # Optimizer instances (num_distributed_optimizer_instances > 1): every instance shards over
++    # its intra-instance groups and the gradient shards are all-reduced across instances (DDP).
++    layer_wise_grad_stats_group = None
++    distributed_optimizer_instance_id = 0
++    if use_separate_distributed_optimizer and (
++        model_chunks[0].ddp_config.num_distributed_optimizer_instances > 1
++    ):
++        instance_groups = ProcessGroupCollection.setup_process_groups_for_optimizer(
++            pg_collection, model_chunks, use_gloo_process_groups=False
+         )
++        distributed_optimizer_instance_id = get_pg_rank(instance_groups['inter_dist_opt_group'])
++        layer_wise_grad_stats_group = instance_groups['intra_dist_opt_group']
+     if use_separate_distributed_optimizer and any(
+         # A separate DistributedOptimizer with byte-level sharding handles any group
+         # whose optimizer is not the primary emerging optimizer (stored in ``eopt_name``,
+@@ -930,7 +934,7 @@ def _get_megatron_emerging_optimizer(
+                     data_parallel_group_gloo=distopt_process_groups['intra_dp_cp_group_gloo'],
+                     data_parallel_group_idx=get_pg_rank(distopt_process_groups['mp_group']),
+                     intra_dist_opt_group=distopt_process_groups['intra_dist_opt_group'],
+-                    distributed_optimizer_instance_id=0,
++                    distributed_optimizer_instance_id=distributed_optimizer_instance_id,
+                     pg_collection=pg_collection,
+                     skip_megatron_wrapping=False,
+                 )
+@@ -975,6 +979,8 @@ def _get_megatron_emerging_optimizer(
+             pg_collection,
+             init_state_fn_list=list(init_fns),
+             model_chunks=model_chunks,
++            grad_stats_group=layer_wise_grad_stats_group,
++            distributed_optimizer_instance_id=distributed_optimizer_instance_id,
+         )
+         # LayerWise owns Muon-managed params; DistOpt instances in ``results``
+         # own the rest. Chain them so the training loop sees one optimizer.
+diff --git a/megatron/core/optimizer/layer_wise_optimizer.py b/megatron/core/optimizer/layer_wise_optimizer.py
+index a132e1be3..1053ac1f7 100644
+--- a/megatron/core/optimizer/layer_wise_optimizer.py
++++ b/megatron/core/optimizer/layer_wise_optimizer.py
+@@ -431,6 +431,8 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+         pg_collection: Optional[ProcessGroupCollection] = None,
+         init_state_fn_list: Optional[List[Callable]] = None,
+         model_chunks: Optional[List] = None,
++        grad_stats_group: Optional[torch.distributed.ProcessGroup] = None,
++        distributed_optimizer_instance_id: int = 0,
+     ) -> None:
+         """
+         Initialize LayerWiseDistributedOptimizer.
+@@ -441,7 +443,13 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+             pg_collection: ProcessGroupCollection.
+             init_state_fn_list: List of init state functions.
+             model_chunks: DDP-wrapped model chunks.
++            grad_stats_group: group over which gradient statistics (norm, zeros) are reduced;
++                None = the whole world. With several optimizer instances: the ranks of one
++                instance (every Muon matrix is owned by one rank per instance).
++            distributed_optimizer_instance_id: this rank's optimizer instance.
+         """
++        self.grad_stats_group = grad_stats_group
++        self.distributed_optimizer_instance_id = distributed_optimizer_instance_id
+ 
+         self.pg_collection = pg_collection
+ 
+@@ -461,10 +469,6 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+         intra_dp_cp = (
+             getattr(pg_collection, 'intra_dp_cp', None) if pg_collection is not None else None
+         )
+-        assert intra_dp_cp is None or get_pg_size(intra_dp_cp) == get_pg_size(self.dp_cp), (
+-            "LayerWiseDistributedOptimizer does not support "
+-            "num_distributed_optimizer_instances > 1."
+-        )
+ 
+         full_param_layouts = None
+         if model_chunks is not None:
+@@ -473,6 +477,18 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+                 for chunk in model_chunks
+                 if hasattr(chunk, 'full_param_layout') and chunk.full_param_layout is not None
+             ] or None
++        if intra_dp_cp is not None and get_pg_size(intra_dp_cp) != get_pg_size(self.dp_cp):
++            # Several optimizer instances. With the shard-aligned buffer layout (computed for the
++            # intra-instance group, as DDP reduce-scatters over it and all-reduces the shards
++            # across instances), each instance owns whole Muon matrices over its own ranks: shard
++            # and all-gather over the intra-instance groups. Every instance then runs the same
++            # update on the same fully reduced gradients. The legacy layout cannot do this.
++            assert full_param_layouts is not None, (
++                "LayerWiseDistributedOptimizer supports num_distributed_optimizer_instances > 1 "
++                "only with the shard-aligned param layout (ddp.use_layer_wise_param_layout)."
++            )
++            self.dp_cp = intra_dp_cp
++            self.expt_dp = getattr(pg_collection, 'intra_expt_dp', None) or self.expt_dp
+         self.shard_params(optimizers, full_param_layouts)
+ 
+         # When a full_param_layout is available, ddp_config.use_distributed_optimizer
+@@ -809,7 +825,7 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+         grads_for_norm = []
+         for optimizer in self.chained_optimizers:
+             grads_for_norm += optimizer.get_grads_for_grad_norm()
+-        grad_norm = get_grad_norm_fp32(grads_for_norm, grad_stats_parallel_group=None)
++        grad_norm = get_grad_norm_fp32(grads_for_norm, grad_stats_parallel_group=self.grad_stats_group)
+         return grad_norm
+ 
+     def has_grad_norm_group(self, grad_norm_group: str) -> bool:
+@@ -835,7 +851,9 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+                     _validate_grad_norm_group(param_grad_norm_group)
+                     local = local or param_grad_norm_group == grad_norm_group
+             flag = torch.tensor([1 if local else 0], dtype=torch.int, device='cuda')
+-            torch.distributed.all_reduce(flag, op=torch.distributed.ReduceOp.MAX, group=None)
++            torch.distributed.all_reduce(
++                flag, op=torch.distributed.ReduceOp.MAX, group=self.grad_stats_group
++            )
+             cache[grad_norm_group] = bool(flag.item() > 0)
+         return cache[grad_norm_group]
+ 
+@@ -845,7 +863,7 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+         grads_for_norm = []
+         for optimizer in self.chained_optimizers:
+             grads_for_norm += optimizer.get_grads_for_grad_norm(grad_norm_group)
+-        grad_norm = get_grad_norm_fp32(grads_for_norm, grad_stats_parallel_group=None)
++        grad_norm = get_grad_norm_fp32(grads_for_norm, grad_stats_parallel_group=self.grad_stats_group)
+         return grad_norm
+ 
+     @torch.no_grad()
+@@ -855,7 +873,7 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+             params += optimizer.get_parameters()
+         return count_zeros_fp32(
+             params,
+-            grad_stats_parallel_group=None,
++            grad_stats_parallel_group=self.grad_stats_group,
+             use_decoupled_grad=self.config.use_precision_aware_optimizer_no_fp8_or_ds_fp8,
+         )
+ 
+@@ -949,6 +967,12 @@ class LayerWiseDistributedOptimizer(ChainedOptimizer):
+                 sh_base.replica_id = _fold_replica_id(
+                     sh_base.replica_id, getattr(sh_base, 'key', ''), gtp_fold
+                 )
++                if self.distributed_optimizer_instance_id:
++                    # Instances hold identical state: only instance 0 writes it.
++                    sh_base.replica_id = (
++                        *sh_base.replica_id[:2],
++                        self.distributed_optimizer_instance_id,
++                    )
+ 
+         # later code assume list but chained optimizer fallback to non-list if there's only one
+         if len(self.chained_optimizers) == 1:

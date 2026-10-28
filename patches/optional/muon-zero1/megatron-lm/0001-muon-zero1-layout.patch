@@ -1,0 +1,67 @@
+# Patch: ZeRO-1 for Muon (DeepSeek-V4 style shard-aligned buckets) in the Bridge model wrapper
+#
+# Problem:   Bridge runs dist_muon (LayerWiseDistributedOptimizer) without ZeRO-1: plain all-reduce
+#            of full gradients and its own param all-gather (use_distributed_optimizer must be off).
+#            Megatron-Core already has the ZeRO-1 path DeepSeek-V4 describes (every Muon matrix
+#            whole inside one rank's shard of a reduce-scatter buffer; non-Muon params in separate
+#            DistOpt buffers), but only megatron/training/training.py (--use-layer-wise-param-layout)
+#            turns it on; the shared _ddp_wrap that Bridge calls never does.
+# What:      DistributedDataParallelConfig.use_layer_wise_param_layout (default False). When set,
+#            _ddp_wrap tags params for buffer routing, sets use_distributed_optimizer=True on the
+#            DDP config and uses LayerWiseDistributedOptimizer.compute_full_param_layout.
+# Porting:   _ddp_wrap in megatron/training/models/dist_utils.py; drop when it handles layer-wise
+#            layouts itself.
+#
+diff --git a/megatron/core/distributed/distributed_data_parallel_config.py b/megatron/core/distributed/distributed_data_parallel_config.py
+index 96925ce12..8c4ede327 100644
+--- a/megatron/core/distributed/distributed_data_parallel_config.py
++++ b/megatron/core/distributed/distributed_data_parallel_config.py
+@@ -31,6 +31,14 @@ class DistributedDataParallelConfig:
+        originally allocated model parameters, otherwise issue all-reduce collectives.
+     """
+ 
++    use_layer_wise_param_layout: bool = False
++    """For the layer-wise distributed optimizer (dist_muon): lay the grad/param buffers out
++       shard-aligned, so that every Muon-managed matrix lies whole within one rank's shard, and
++       use the distributed optimizer's reduce-scatter / all-gather on them (ZeRO-1 for Muon, as
++       in DeepSeek-V4). Non-Muon params (embeddings, norms, biases) go to separate buffers handled
++       by a regular DistributedOptimizer. Implies use_distributed_optimizer.
++    """
++
+     num_distributed_optimizer_instances: int = 1
+     """Sets the factor by which the DP domain is sharded to have the partial DistOpt
+        enabled. Defaults to 1, which means DistOpt is across entire DP domain.
+diff --git a/megatron/training/models/dist_utils.py b/megatron/training/models/dist_utils.py
+index 46e562edc..bf3a57fc9 100644
+--- a/megatron/training/models/dist_utils.py
++++ b/megatron/training/models/dist_utils.py
+@@ -318,6 +318,20 @@ def _ddp_wrap(
+ 
+             # Pre-compute parameter layouts for the distributed optimizer.
+             # Only pass to DDP; FSDP variants don't accept full_param_layout.
++            if getattr(ddp_config, "use_layer_wise_param_layout", False) and DP is DistributedDataParallel:
++                # Muon with ZeRO-1: route Muon-managed matrices to shard-aligned buffers and the
++                # rest to DistOpt-style buffers (what megatron/training/training.py does for
++                # --use-layer-wise-param-layout).
++                from megatron.core.optimizer.layer_wise_optimizer import (
++                    LayerWiseDistributedOptimizer,
++                    tag_params_for_buffer_routing,
++                )
++
++                ddp_config.use_distributed_optimizer = True
++                tag_params_for_buffer_routing([model_chunk])
++                compute_full_param_layout = LayerWiseDistributedOptimizer.compute_full_param_layout
++            else:
++                compute_full_param_layout = DistributedOptimizer.compute_full_param_layout
+             if ddp_config.use_distributed_optimizer and DP is DistributedDataParallel:
+                 all_params = [
+                     p for p in model_chunk.parameters() if p.requires_grad
+@@ -335,7 +349,7 @@ def _ddp_wrap(
+                 intra_dp_cp_group = getattr(pg_collection, "intra_dp_cp", None)
+                 intra_expt_dp_group = getattr(pg_collection, "intra_expt_dp", None)
+                 chunk_kwargs["full_param_layout"] = (
+-                    DistributedOptimizer.compute_full_param_layout(
++                    compute_full_param_layout(
+                         all_params,
+                         effective_bucket_size,
+                         (

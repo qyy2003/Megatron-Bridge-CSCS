@@ -29,35 +29,13 @@ if [ "$MODE" = smoke ] && [ -d "$RUN_DIR/checkpoints" ]; then
 fi
 
 ########## Code snapshot: pinned Megatron-Bridge + Megatron-LM + patches/ ##########
-# Content-addressed and shared by all jobs with the same code; the user's submodule
-# working trees are never touched. Mounted at /opt/Megatron-Bridge in the container.
-PATCH_HASH=$(cat "$SRC"/patches/megatron-bridge/*.patch "$SRC"/patches/megatron-lm/*.patch 2>/dev/null \
-    | sha256sum | cut -c1-12)
-CODE_ID=mb-${MBRIDGE_COMMIT:0:10}_mlm-${MLM_COMMIT:0:10}_p-$PATCH_HASH
-SNAP=$CODE_ROOT/$CODE_ID
-echo "code snapshot: $SNAP"
-(
-    flock 9
-    if [ ! -f "$SNAP/.src_ready" ]; then
-        set -e
-        export GIT_CEILING_DIRECTORIES=$CODE_ROOT
-        TMP=$SNAP.tmp.$SLURM_JOB_ID
-        rm -rf "$TMP"
-        mkdir -p "$TMP/3rdparty/Megatron-LM"
-        git -C "$WORKDIR/Megatron-Bridge" archive "$MBRIDGE_COMMIT" | tar -x -C "$TMP"
-        git -C "$WORKDIR/Megatron-Bridge/3rdparty/Megatron-LM" archive "$MLM_COMMIT" | tar -x -C "$TMP/3rdparty/Megatron-LM"
-        for target in megatron-bridge:. megatron-lm:3rdparty/Megatron-LM; do
-            for p in "$SRC/patches/${target%%:*}"/*.patch; do
-                [ -e "$p" ] || continue
-                echo "  apply ${target%%:*}/$(basename "$p")"
-                (cd "$TMP/${target#*:}" && git apply --whitespace=nowarn "$p")
-            done
-        done
-        touch "$TMP/.src_ready"
-        rm -rf "$SNAP"   # a leftover without .src_ready is an aborted attempt
-        mv "$TMP" "$SNAP"
-    fi
-) 9>"$CODE_ROOT/.lock" || { echo "ERROR: could not build the code snapshot"; exit 1; }
+# Content-addressed, shared by all jobs with the same code and patch sets (PATCHES); mounted at
+# /opt/Megatron-Bridge in the container. See tools/build_code_snapshot.sh.
+SNAP_OUT=$(WORKDIR=$WORKDIR bash "$SRC/tools/build_code_snapshot.sh" "$SRC" "$CODE_ROOT" "$MBRIDGE_COMMIT" "$MLM_COMMIT" "$PATCHES")
+SNAP_RC=$?
+echo "$SNAP_OUT" | grep -v '^SNAP='
+SNAP=$(echo "$SNAP_OUT" | sed -n 's/^SNAP=//p')
+[ "$SNAP_RC" -eq 0 ] && [ -n "$SNAP" ] || { echo "ERROR: could not build the code snapshot"; exit 1; }
 
 ########## Container (EDF) ##########
 EDF=$RUN_DIR/logs/edf-$SLURM_JOB_ID.toml
@@ -108,6 +86,7 @@ if [ "$NETLOG" -ge 2 ]; then
     mkdir -p "$NCCL_INSPECTOR_DUMP_DIR"
 fi
 [ "$NETLOG" -ge 1 ] && TRAIN_ARGS+=(--net-log-dir "$NETLOG_DIR/steps")
+TRAIN_ARGS+=(--train-time-log "$RUN_DIR/logs/train_time.jsonl")
 if [ "$NSYS" = 1 ]; then
     TRAIN_ARGS+=(--nsys-steps "$NSYS_STEPS" --nsys-ranks "$NSYS_RANKS")
     mkdir -p "$NSYS_DIR"

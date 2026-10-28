@@ -5,6 +5,12 @@ usage is in `README.md`.
 
 ## Status
 
+> **Stopped on 2026-10-20** after 4 h 29 min (job 3705060, step ~1080), on request: the run is kept
+> as the Adam baseline of the 500-step optimizer comparison. Checkpoint 1000 is kept; validation at
+> step 500: 2.820 (PPL 16.8), at step 1000: 2.313. Resume with the launch command below.
+> Comparison with Muon and Muon ZeRO-1 + GLOBAL_DP=2: `analysis/2026-10-21-adam-muon-gdp2/REPORT.md`.
+> The table below is the state at launch.
+
 | | |
 |---|---|
 | Launched | 06:01 with `cd /iopsstor/scratch/cscs/yqin/Megatron-Bridge-CSCS && source config.sh && ./launch.sh train 8 1T` |

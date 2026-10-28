@@ -1,0 +1,13 @@
+shape,op,size_class,ranks,ops_per_step,GB_per_step,kernel_s_per_step
+n2/nodes2/stride16,Recv,large,32,32.0,0.5368,0.7483
+n16/nodes4/stride1,AllReduce,large,31,18.88,4.6832,0.7704
+n4/nodes4/stride4,AllReduce,large,32,50.7,7.5009,0.6584
+n2/nodes2/stride16,Send,large,32,32.0,0.5368,0.5936
+n4/nodes4/stride4,AllGather,large,32,0.82,1.6836,0.2827
+n16/nodes4/stride1,AllReduce,small,32,659.11,0.0013,0.2367
+n2/nodes2/stride16,AllReduce,large,32,0.83,0.847,0.0567
+n4/nodes1/stride1,AllGather,large,32,654.87,0.6867,0.0225
+n2/nodes2/stride16,AllReduce,small,32,5.2,0.0,0.0167
+n32/nodes8/stride1,AllReduce,small,32,3.86,0.0,0.0031
+n16/nodes4/stride1,AllGather,large,12,0.03,0.0,0.0012
+n32/nodes8/stride1,AllGather,small,31,0.02,0.0,0.0

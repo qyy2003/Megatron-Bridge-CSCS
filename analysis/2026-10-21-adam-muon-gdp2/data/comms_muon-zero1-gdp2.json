@@ -1,0 +1,1807 @@
+{
+ "0x84fb5c3d300f49": {
+  "shape": "n32/nodes8/stride1",
+  "members": {
+   "0": "nid006082",
+   "1": "nid006082",
+   "2": "nid006082",
+   "3": "nid006082",
+   "4": "nid006103",
+   "5": "nid006103",
+   "6": "nid006103",
+   "7": "nid006103",
+   "8": "nid007156",
+   "9": "nid007156",
+   "10": "nid007156",
+   "11": "nid007156",
+   "12": "nid007180",
+   "13": "nid007180",
+   "14": "nid007180",
+   "15": "nid007180",
+   "16": "nid007183",
+   "17": "nid007183",
+   "18": "nid007183",
+   "19": "nid007183",
+   "20": "nid007186",
+   "21": "nid007186",
+   "22": "nid007186",
+   "23": "nid007186",
+   "24": "nid007190",
+   "25": "nid007190",
+   "26": "nid007190",
+   "27": "nid007190",
+   "28": "nid007220",
+   "29": "nid007220",
+   "30": "nid007220",
+   "31": "nid007220"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 3.02,
+    "GB": 0.0,
+    "kernel_s": 0.0022
+   },
+   "AllGather/small": {
+    "ops": 0.019,
+    "GB": 0.0,
+    "kernel_s": 1e-05
+   }
+  }
+ },
+ "0x63ccc1229da3e5": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "3": "nid006082",
+   "19": "nid007183"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.13545
+   }
+  }
+ },
+ "0xc6c73408944fa6": {
+  "shape": "n16/nodes4/stride1",
+  "members": {
+   "0": "nid006082",
+   "1": "nid006082",
+   "2": "nid006082",
+   "3": "nid006082",
+   "4": "nid006103",
+   "5": "nid006103",
+   "6": "nid006103",
+   "7": "nid006103",
+   "8": "nid007156",
+   "9": "nid007156",
+   "10": "nid007156",
+   "11": "nid007156",
+   "12": "nid007180",
+   "13": "nid007180",
+   "14": "nid007180",
+   "15": "nid007180"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 672.834,
+    "GB": 0.00138,
+    "kernel_s": 0.06811
+   }
+  }
+ },
+ "0x4702c93f7dd6a1": {
+  "shape": "n4/nodes1/stride1",
+  "members": {
+   "0": "nid006082",
+   "1": "nid006082",
+   "2": "nid006082",
+   "3": "nid006082"
+  },
+  "ops": {
+   "AllGather/large": {
+    "ops": 670.395,
+    "GB": 0.70296,
+    "kernel_s": 0.02287
+   }
+  }
+ },
+ "0x913d747a165ffd": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "3": "nid006082",
+   "19": "nid007183"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.51491
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.67582
+   },
+   "AllReduce/small": {
+    "ops": 2.65,
+    "GB": 0.0,
+    "kernel_s": 0.00026
+   }
+  }
+ },
+ "0x291405a73cd90b": {
+  "shape": "n8/nodes2/stride1",
+  "members": {
+   "0": "nid006082",
+   "1": "nid006082",
+   "2": "nid006082",
+   "3": "nid006082",
+   "4": "nid006103",
+   "5": "nid006103",
+   "6": "nid006103",
+   "7": "nid006103"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 6.0,
+    "GB": 0.33144,
+    "kernel_s": 0.18943
+   },
+   "AllGather/large": {
+    "ops": 4.69,
+    "GB": 0.25903,
+    "kernel_s": 0.04779
+   }
+  }
+ },
+ "0x2847472d9b90c9": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "3": "nid006082",
+   "7": "nid006103"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 102.0,
+    "GB": 4.274,
+    "kernel_s": 0.30901
+   },
+   "AllGather/large": {
+    "ops": 82.62,
+    "GB": 3.46194,
+    "kernel_s": 0.15803
+   }
+  }
+ },
+ "0x5787f3fea0ce76": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "3": "nid006082",
+   "11": "nid007156"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 108.0,
+    "GB": 4.60543,
+    "kernel_s": 0.36448
+   }
+  }
+ },
+ "0xde03a9420ab4ac": {
+  "shape": "n16/nodes4/stride1",
+  "members": {
+   "0": "nid006082",
+   "1": "nid006082",
+   "2": "nid006082",
+   "3": "nid006082",
+   "4": "nid006103",
+   "5": "nid006103",
+   "6": "nid006103",
+   "7": "nid006103",
+   "16": "nid007183",
+   "17": "nid007183",
+   "18": "nid007183",
+   "19": "nid007183",
+   "20": "nid007186",
+   "21": "nid007186",
+   "22": "nid007186",
+   "23": "nid007186"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 1.961,
+    "GB": 0.0,
+    "kernel_s": 0.00105
+   }
+  }
+ },
+ "0x69ee3231643b0f": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "3": "nid006082",
+   "19": "nid007183"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.48,
+    "GB": 0.0,
+    "kernel_s": 0.02646
+   }
+  }
+ },
+ "0x375fb8d7f23d77": {
+  "shape": "n16/nodes4/stride1",
+  "members": {
+   "0": "nid006082",
+   "1": "nid006082",
+   "2": "nid006082",
+   "3": "nid006082",
+   "4": "nid006103",
+   "5": "nid006103",
+   "6": "nid006103",
+   "7": "nid006103",
+   "8": "nid007156",
+   "9": "nid007156",
+   "10": "nid007156",
+   "11": "nid007156",
+   "12": "nid007180",
+   "13": "nid007180",
+   "14": "nid007180",
+   "15": "nid007180"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 0.853,
+    "GB": 0.0,
+    "kernel_s": 0.01727
+   }
+  }
+ },
+ "0x355377457b98ac": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "1": "nid006082",
+   "17": "nid007183"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.13526
+   }
+  }
+ },
+ "0x19e83510187984": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "1": "nid006082",
+   "17": "nid007183"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.52573
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.68653
+   },
+   "AllReduce/small": {
+    "ops": 2.67,
+    "GB": 0.0,
+    "kernel_s": 0.00024
+   }
+  }
+ },
+ "0x709dc2cc666796": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "1": "nid006082",
+   "5": "nid006103"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 102.0,
+    "GB": 4.274,
+    "kernel_s": 0.28382
+   },
+   "AllGather/large": {
+    "ops": 81.6,
+    "GB": 3.4192,
+    "kernel_s": 0.15593
+   }
+  }
+ },
+ "0x525b99216a229e": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "1": "nid006082",
+   "9": "nid007156"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 108.0,
+    "GB": 4.60543,
+    "kernel_s": 0.33197
+   }
+  }
+ },
+ "0x6396772361c11f": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "1": "nid006082",
+   "17": "nid007183"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.42,
+    "GB": 0.0,
+    "kernel_s": 0.02545
+   }
+  }
+ },
+ "0x8038fe4d997e4e": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "2": "nid006082",
+   "18": "nid007183"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 0.99,
+    "GB": 1.00643,
+    "kernel_s": 0.13299
+   }
+  }
+ },
+ "0x4c8cee0114005d": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "2": "nid006082",
+   "18": "nid007183"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.52682
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.68764
+   },
+   "AllReduce/small": {
+    "ops": 2.54,
+    "GB": 0.0,
+    "kernel_s": 0.00015
+   }
+  }
+ },
+ "0x81b5f3c1a5da1f": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "2": "nid006082",
+   "6": "nid006103"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 102.0,
+    "GB": 4.274,
+    "kernel_s": 0.26517
+   },
+   "AllGather/large": {
+    "ops": 76.5,
+    "GB": 3.2055,
+    "kernel_s": 0.14617
+   }
+  }
+ },
+ "0x5df545374583f7": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "2": "nid006082",
+   "10": "nid007156"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 108.0,
+    "GB": 4.60543,
+    "kernel_s": 0.31131
+   }
+  }
+ },
+ "0xb635061cd54f40": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "2": "nid006082",
+   "18": "nid007183"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.3,
+    "GB": 0.0,
+    "kernel_s": 0.02397
+   }
+  }
+ },
+ "0x857ebb58b3e253": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "0": "nid006082",
+   "16": "nid007183"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 0.99,
+    "GB": 1.00643,
+    "kernel_s": 0.13335
+   }
+  }
+ },
+ "0xd6e2365f408f82": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "0": "nid006082",
+   "16": "nid007183"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.51824
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.67896
+   },
+   "AllReduce/small": {
+    "ops": 2.86,
+    "GB": 0.0,
+    "kernel_s": 0.00017
+   }
+  }
+ },
+ "0x9eb6e58cad770d": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "0": "nid006082",
+   "4": "nid006103"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 102.0,
+    "GB": 4.274,
+    "kernel_s": 0.28402
+   },
+   "AllGather/large": {
+    "ops": 78.4,
+    "GB": 3.28515,
+    "kernel_s": 0.1498
+   }
+  }
+ },
+ "0x4545e36e6f54ba": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "0": "nid006082",
+   "8": "nid007156"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 107.6,
+    "GB": 4.58807,
+    "kernel_s": 0.33097
+   }
+  }
+ },
+ "0xf2ec2bb3040851": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "0": "nid006082",
+   "16": "nid007183"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.4,
+    "GB": 0.0,
+    "kernel_s": 0.1768
+   }
+  }
+ },
+ "0x83ba4936c77ced": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "5": "nid006103",
+   "21": "nid007186"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.13572
+   }
+  }
+ },
+ "0x2730157bec1e9e": {
+  "shape": "n4/nodes1/stride1",
+  "members": {
+   "4": "nid006103",
+   "5": "nid006103",
+   "6": "nid006103",
+   "7": "nid006103"
+  },
+  "ops": {
+   "AllGather/large": {
+    "ops": 669.335,
+    "GB": 0.70185,
+    "kernel_s": 0.02314
+   }
+  }
+ },
+ "0x72c59c5d86c5f7": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "5": "nid006103",
+   "21": "nid007186"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.49446
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.65994
+   },
+   "AllReduce/small": {
+    "ops": 2.58,
+    "GB": 0.0,
+    "kernel_s": 0.00028
+   }
+  }
+ },
+ "0x4a8d3b3659d6de": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "5": "nid006103",
+   "13": "nid007180"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 108.0,
+    "GB": 4.60543,
+    "kernel_s": 0.32959
+   }
+  }
+ },
+ "0x5df856119c3c10": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "5": "nid006103",
+   "21": "nid007186"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.38,
+    "GB": 0.0,
+    "kernel_s": 0.02403
+   }
+  }
+ },
+ "0xae9c17ec5c2ce8": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "6": "nid006103",
+   "22": "nid007186"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.13497
+   }
+  }
+ },
+ "0x24044517238c18": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "6": "nid006103",
+   "22": "nid007186"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.50329
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.66879
+   },
+   "AllReduce/small": {
+    "ops": 2.59,
+    "GB": 0.0,
+    "kernel_s": 0.00021
+   }
+  }
+ },
+ "0xf1a4df896c1d00": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "6": "nid006103",
+   "14": "nid007180"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 108.0,
+    "GB": 4.60543,
+    "kernel_s": 0.30541
+   }
+  }
+ },
+ "0xe9297675894dc0": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "6": "nid006103",
+   "22": "nid007186"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.39,
+    "GB": 0.0,
+    "kernel_s": 0.02669
+   }
+  }
+ },
+ "0xc52039a3613367": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "7": "nid006103",
+   "23": "nid007186"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.13557
+   }
+  }
+ },
+ "0x73e763a3eac177": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "7": "nid006103",
+   "23": "nid007186"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.50758
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.673
+   },
+   "AllReduce/small": {
+    "ops": 2.55,
+    "GB": 0.0,
+    "kernel_s": 0.00023
+   }
+  }
+ },
+ "0xaecdae29b5fc69": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "7": "nid006103",
+   "15": "nid007180"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 108.0,
+    "GB": 4.60543,
+    "kernel_s": 0.36582
+   }
+  }
+ },
+ "0x42a7b7fcf261ab": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "7": "nid006103",
+   "23": "nid007186"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.33,
+    "GB": 0.0,
+    "kernel_s": 0.02443
+   }
+  }
+ },
+ "0x8966aa4cc6379b": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "4": "nid006103",
+   "20": "nid007186"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 0.99,
+    "GB": 1.00643,
+    "kernel_s": 0.13504
+   }
+  }
+ },
+ "0x5a5fdf961951f6": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "4": "nid006103",
+   "20": "nid007186"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.50227
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.66757
+   },
+   "AllReduce/small": {
+    "ops": 2.84,
+    "GB": 0.0,
+    "kernel_s": 0.00016
+   }
+  }
+ },
+ "0xae6fa137477374": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "4": "nid006103",
+   "12": "nid007180"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 108.0,
+    "GB": 4.60543,
+    "kernel_s": 0.33
+   }
+  }
+ },
+ "0x722ed723bbd916": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "4": "nid006103",
+   "20": "nid007186"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.48,
+    "GB": 0.0,
+    "kernel_s": 0.02028
+   }
+  }
+ },
+ "0xa73f7b8d12979f": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "8": "nid007156",
+   "24": "nid007190"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 0.99,
+    "GB": 1.00643,
+    "kernel_s": 0.12325
+   }
+  }
+ },
+ "0xe9005a0cb05b39": {
+  "shape": "n4/nodes1/stride1",
+  "members": {
+   "8": "nid007156",
+   "9": "nid007156",
+   "10": "nid007156",
+   "11": "nid007156"
+  },
+  "ops": {
+   "AllGather/large": {
+    "ops": 672.0,
+    "GB": 0.70464,
+    "kernel_s": 0.02308
+   }
+  }
+ },
+ "0xd2abd8ff5bcfd2": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "8": "nid007156",
+   "24": "nid007190"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.52449
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.68516
+   },
+   "AllReduce/small": {
+    "ops": 2.82,
+    "GB": 0.0,
+    "kernel_s": 0.00016
+   }
+  }
+ },
+ "0xdf670b6e3bc326": {
+  "shape": "n8/nodes2/stride1",
+  "members": {
+   "8": "nid007156",
+   "9": "nid007156",
+   "10": "nid007156",
+   "11": "nid007156",
+   "12": "nid007180",
+   "13": "nid007180",
+   "14": "nid007180",
+   "15": "nid007180"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 5.992,
+    "GB": 0.33099,
+    "kernel_s": 0.18842
+   },
+   "AllGather/large": {
+    "ops": 4.615,
+    "GB": 0.25565,
+    "kernel_s": 0.05187
+   }
+  }
+ },
+ "0xe556222c00d3be": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "8": "nid007156",
+   "12": "nid007180"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 101.79,
+    "GB": 4.26523,
+    "kernel_s": 0.2836
+   },
+   "AllGather/large": {
+    "ops": 73.14,
+    "GB": 3.06461,
+    "kernel_s": 0.13974
+   }
+  }
+ },
+ "0xe8b0be71ab3997": {
+  "shape": "n16/nodes4/stride1",
+  "members": {
+   "8": "nid007156",
+   "9": "nid007156",
+   "10": "nid007156",
+   "11": "nid007156",
+   "12": "nid007180",
+   "13": "nid007180",
+   "14": "nid007180",
+   "15": "nid007180",
+   "24": "nid007190",
+   "25": "nid007190",
+   "26": "nid007190",
+   "27": "nid007190",
+   "28": "nid007220",
+   "29": "nid007220",
+   "30": "nid007220",
+   "31": "nid007220"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 1.986,
+    "GB": 0.0,
+    "kernel_s": 0.0014
+   }
+  }
+ },
+ "0xa68e91109b0da9": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "8": "nid007156",
+   "24": "nid007190"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.5,
+    "GB": 0.0,
+    "kernel_s": 0.02445
+   }
+  }
+ },
+ "0x9205b573394334": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "11": "nid007156",
+   "27": "nid007190"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.12523
+   }
+  }
+ },
+ "0xddbd27adf03eea": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "11": "nid007156",
+   "27": "nid007190"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.53762
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.69839
+   },
+   "AllReduce/small": {
+    "ops": 2.62,
+    "GB": 0.0,
+    "kernel_s": 0.00017
+   }
+  }
+ },
+ "0xa54c5d9888b83b": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "11": "nid007156",
+   "15": "nid007180"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 102.0,
+    "GB": 4.274,
+    "kernel_s": 0.30903
+   },
+   "AllGather/large": {
+    "ops": 83.26,
+    "GB": 3.48886,
+    "kernel_s": 0.1594
+   }
+  }
+ },
+ "0x80ccce43200c1a": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "11": "nid007156",
+   "27": "nid007190"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.46,
+    "GB": 0.0,
+    "kernel_s": 0.02584
+   }
+  }
+ },
+ "0xed231a6cbbd4fc": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "9": "nid007156",
+   "25": "nid007190"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.12478
+   }
+  }
+ },
+ "0xecdd6b52a800f4": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "9": "nid007156",
+   "25": "nid007190"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.53966
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.70044
+   },
+   "AllReduce/small": {
+    "ops": 2.66,
+    "GB": 0.0,
+    "kernel_s": 0.00024
+   }
+  }
+ },
+ "0x7d4d10edae3d88": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "9": "nid007156",
+   "13": "nid007180"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 102.0,
+    "GB": 4.274,
+    "kernel_s": 0.28352
+   },
+   "AllGather/large": {
+    "ops": 80.71,
+    "GB": 3.38183,
+    "kernel_s": 0.15448
+   }
+  }
+ },
+ "0x18e641d54d5513": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "9": "nid007156",
+   "25": "nid007190"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.52,
+    "GB": 0.0,
+    "kernel_s": 0.0257
+   }
+  }
+ },
+ "0xed78412accf273": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "10": "nid007156",
+   "26": "nid007190"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.12477
+   }
+  }
+ },
+ "0x68b2bb59b9d621": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "10": "nid007156",
+   "26": "nid007190"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.54151
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.7023
+   },
+   "AllReduce/small": {
+    "ops": 2.54,
+    "GB": 0.0,
+    "kernel_s": 0.00015
+   }
+  }
+ },
+ "0x63395275f9cffa": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "10": "nid007156",
+   "14": "nid007180"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 102.0,
+    "GB": 4.274,
+    "kernel_s": 0.26552
+   },
+   "AllGather/large": {
+    "ops": 74.27,
+    "GB": 3.11205,
+    "kernel_s": 0.14213
+   }
+  }
+ },
+ "0xbe8c56b995697f": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "10": "nid007156",
+   "26": "nid007190"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.34,
+    "GB": 0.0,
+    "kernel_s": 0.02548
+   }
+  }
+ },
+ "0x18f8223fda4975": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "14": "nid007180",
+   "30": "nid007220"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.12411
+   }
+  }
+ },
+ "0x8e2f28206c981a": {
+  "shape": "n4/nodes1/stride1",
+  "members": {
+   "12": "nid007180",
+   "13": "nid007180",
+   "14": "nid007180",
+   "15": "nid007180"
+  },
+  "ops": {
+   "AllGather/large": {
+    "ops": 668.125,
+    "GB": 0.70058,
+    "kernel_s": 0.02281
+   }
+  }
+ },
+ "0x7aa37f40f9ac27": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "14": "nid007180",
+   "30": "nid007220"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.50834
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.67073
+   },
+   "AllReduce/small": {
+    "ops": 2.54,
+    "GB": 0.0,
+    "kernel_s": 0.00027
+   }
+  }
+ },
+ "0xa90de331d70811": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "14": "nid007180",
+   "30": "nid007220"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.34,
+    "GB": 0.0,
+    "kernel_s": 0.02444
+   }
+  }
+ },
+ "0xdd66307472195f": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "15": "nid007180",
+   "31": "nid007220"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.12502
+   }
+  }
+ },
+ "0x6a210c9bf7dbe2": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "15": "nid007180",
+   "31": "nid007220"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.51958
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.68158
+   },
+   "AllReduce/small": {
+    "ops": 2.83,
+    "GB": 0.0,
+    "kernel_s": 0.00258
+   }
+  }
+ },
+ "0x457b78ea9eb531": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "15": "nid007180",
+   "31": "nid007220"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.53,
+    "GB": 0.0,
+    "kernel_s": 0.0844
+   }
+  }
+ },
+ "0xd0f66739363237": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "13": "nid007180",
+   "29": "nid007220"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.12512
+   }
+  }
+ },
+ "0xdb3ce8b36d456f": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "13": "nid007180",
+   "29": "nid007220"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.52025
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.68253
+   },
+   "AllReduce/small": {
+    "ops": 2.53,
+    "GB": 0.0,
+    "kernel_s": 0.00016
+   }
+  }
+ },
+ "0xa45dcfb5af3a7c": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "13": "nid007180",
+   "29": "nid007220"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.37,
+    "GB": 0.0,
+    "kernel_s": 0.02503
+   }
+  }
+ },
+ "0x651e16ae8ffef2": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "12": "nid007180",
+   "28": "nid007220"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 1.0,
+    "GB": 1.01659,
+    "kernel_s": 0.12511
+   }
+  }
+ },
+ "0x867bbf95eba131": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "12": "nid007180",
+   "28": "nid007220"
+  },
+  "ops": {
+   "Send/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.51941
+   },
+   "Recv/large": {
+    "ops": 32.0,
+    "GB": 0.53687,
+    "kernel_s": 0.68149
+   },
+   "AllReduce/small": {
+    "ops": 2.8,
+    "GB": 0.0,
+    "kernel_s": 0.00013
+   }
+  }
+ },
+ "0x8526dabf7f63ce": {
+  "shape": "n2/nodes2/stride16",
+  "members": {
+   "12": "nid007180",
+   "28": "nid007220"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 2.46,
+    "GB": 0.0,
+    "kernel_s": 0.02748
+   }
+  }
+ },
+ "0x104f75608e646a": {
+  "shape": "n16/nodes4/stride1",
+  "members": {
+   "16": "nid007183",
+   "17": "nid007183",
+   "18": "nid007183",
+   "19": "nid007183",
+   "20": "nid007186",
+   "21": "nid007186",
+   "22": "nid007186",
+   "23": "nid007186",
+   "24": "nid007190",
+   "25": "nid007190",
+   "26": "nid007190",
+   "27": "nid007190",
+   "28": "nid007220",
+   "29": "nid007220",
+   "30": "nid007220",
+   "31": "nid007220"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 640.859,
+    "GB": 0.00131,
+    "kernel_s": 0.08714
+   }
+  }
+ },
+ "0xf6db5a10310c30": {
+  "shape": "n4/nodes1/stride1",
+  "members": {
+   "16": "nid007183",
+   "17": "nid007183",
+   "18": "nid007183",
+   "19": "nid007183"
+  },
+  "ops": {
+   "AllGather/large": {
+    "ops": 639.55,
+    "GB": 0.67062,
+    "kernel_s": 0.02903
+   }
+  }
+ },
+ "0x30595ccf0f85ea": {
+  "shape": "n8/nodes2/stride1",
+  "members": {
+   "16": "nid007183",
+   "17": "nid007183",
+   "18": "nid007183",
+   "19": "nid007183",
+   "20": "nid007186",
+   "21": "nid007186",
+   "22": "nid007186",
+   "23": "nid007186"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 5.98,
+    "GB": 0.8653,
+    "kernel_s": 0.12493
+   },
+   "AllGather/large": {
+    "ops": 2.345,
+    "GB": 0.33977,
+    "kernel_s": 0.04566
+   }
+  }
+ },
+ "0x8b8459c9e056f3": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "17": "nid007183",
+   "25": "nid007190"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 8.0,
+    "GB": 8.9213,
+    "kernel_s": 0.44248
+   }
+  }
+ },
+ "0x1d28e3a67dd39e": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "17": "nid007183",
+   "21": "nid007186"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 2.0,
+    "GB": 8.05306,
+    "kernel_s": 0.42126
+   },
+   "AllGather/large": {
+    "ops": 0.78,
+    "GB": 3.14069,
+    "kernel_s": 0.13697
+   }
+  }
+ },
+ "0xee4b4b7be0bce8": {
+  "shape": "n16/nodes4/stride1",
+  "members": {
+   "16": "nid007183",
+   "17": "nid007183",
+   "18": "nid007183",
+   "19": "nid007183",
+   "20": "nid007186",
+   "21": "nid007186",
+   "22": "nid007186",
+   "23": "nid007186",
+   "24": "nid007190",
+   "25": "nid007190",
+   "26": "nid007190",
+   "27": "nid007190",
+   "28": "nid007220",
+   "29": "nid007220",
+   "30": "nid007220",
+   "31": "nid007220"
+  },
+  "ops": {
+   "AllReduce/small": {
+    "ops": 4.605,
+    "GB": 0.0,
+    "kernel_s": 0.01963
+   }
+  }
+ },
+ "0xa1a1ef2205b1f1": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "19": "nid007183",
+   "27": "nid007190"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 8.0,
+    "GB": 8.9213,
+    "kernel_s": 0.44311
+   }
+  }
+ },
+ "0xa623dc592b3211": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "19": "nid007183",
+   "23": "nid007186"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 2.0,
+    "GB": 8.05306,
+    "kernel_s": 0.42158
+   },
+   "AllGather/large": {
+    "ops": 0.79,
+    "GB": 3.18096,
+    "kernel_s": 0.13892
+   }
+  }
+ },
+ "0xa94555320f892f": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "18": "nid007183",
+   "26": "nid007190"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 8.0,
+    "GB": 8.9213,
+    "kernel_s": 0.44166
+   }
+  }
+ },
+ "0xe97595c45fd579": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "18": "nid007183",
+   "22": "nid007186"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 2.0,
+    "GB": 8.05306,
+    "kernel_s": 0.42102
+   },
+   "AllGather/large": {
+    "ops": 0.8,
+    "GB": 3.22123,
+    "kernel_s": 0.14046
+   }
+  }
+ },
+ "0x18eecc143a1f39": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "16": "nid007183",
+   "24": "nid007190"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 7.87,
+    "GB": 8.74722,
+    "kernel_s": 0.43376
+   }
+  }
+ },
+ "0x6d833e8b384ada": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "16": "nid007183",
+   "20": "nid007186"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 1.96,
+    "GB": 7.892,
+    "kernel_s": 0.41372
+   },
+   "AllGather/large": {
+    "ops": 0.74,
+    "GB": 2.97963,
+    "kernel_s": 0.13019
+   }
+  }
+ },
+ "0x6ca86d6bb7366d": {
+  "shape": "n4/nodes1/stride1",
+  "members": {
+   "20": "nid007186",
+   "21": "nid007186",
+   "22": "nid007186",
+   "23": "nid007186"
+  },
+  "ops": {
+   "AllGather/large": {
+    "ops": 640.0,
+    "GB": 0.67109,
+    "kernel_s": 0.02339
+   }
+  }
+ },
+ "0xd2608b28bfe73f": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "22": "nid007186",
+   "30": "nid007220"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 8.0,
+    "GB": 8.9213,
+    "kernel_s": 0.44219
+   }
+  }
+ },
+ "0x69ecaa821ffb71": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "23": "nid007186",
+   "31": "nid007220"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 8.0,
+    "GB": 8.9213,
+    "kernel_s": 0.44222
+   }
+  }
+ },
+ "0x4aebd558debaf0": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "21": "nid007186",
+   "29": "nid007220"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 8.0,
+    "GB": 8.9213,
+    "kernel_s": 0.44237
+   }
+  }
+ },
+ "0x1d869814ac0eed": {
+  "shape": "n2/nodes2/stride8",
+  "members": {
+   "20": "nid007186",
+   "28": "nid007220"
+  },
+  "ops": {
+   "AllReduce/large": {
+    "ops": 8.0,
+    "GB": 8.9213,
+    "kernel_s": 0.44249
+   }
+  }
+ },
+ "0x76d77901523f8c": {
+  "shape": "n4/nodes1/stride1",
+  "members": {
+   "24": "nid007190",
+   "25": "nid007190",
+   "26": "nid007190",
+   "27": "nid007190"
+  },
+  "ops": {
+   "AllGather/large": {
+    "ops": 639.575,
+    "GB": 0.67064,
+    "kernel_s": 0.02468
+   }
+  }
+ },
+ "0x53fa38ee298b14": {
+  "shape": "n8/nodes2/stride1",
+  "members": {
+   "24": "nid007190",
+   "25": "nid007190",
+   "26": "nid007190",
+   "27": "nid007190",
+   "28": "nid007220",
+   "29": "nid007220",
+   "30": "nid007220",
+   "31": "nid007220"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 6.0,
+    "GB": 0.86824,
+    "kernel_s": 0.12473
+   },
+   "AllGather/large": {
+    "ops": 2.425,
+    "GB": 0.35153,
+    "kernel_s": 0.05004
+   }
+  }
+ },
+ "0x7fe5797a5f3b24": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "25": "nid007190",
+   "29": "nid007220"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 2.0,
+    "GB": 8.05306,
+    "kernel_s": 0.42089
+   },
+   "AllGather/large": {
+    "ops": 0.79,
+    "GB": 3.18096,
+    "kernel_s": 0.13848
+   }
+  }
+ },
+ "0x172f0b5c3e429d": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "26": "nid007190",
+   "30": "nid007220"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 2.0,
+    "GB": 8.05306,
+    "kernel_s": 0.42069
+   },
+   "AllGather/large": {
+    "ops": 0.83,
+    "GB": 3.34202,
+    "kernel_s": 0.14551
+   }
+  }
+ },
+ "0x6f05519fd53728": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "27": "nid007190",
+   "31": "nid007220"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 2.0,
+    "GB": 8.05306,
+    "kernel_s": 0.42022
+   },
+   "AllGather/large": {
+    "ops": 0.82,
+    "GB": 3.30176,
+    "kernel_s": 0.14379
+   }
+  }
+ },
+ "0x50ef3dd9440337": {
+  "shape": "n2/nodes2/stride4",
+  "members": {
+   "24": "nid007190",
+   "28": "nid007220"
+  },
+  "ops": {
+   "ReduceScatter/large": {
+    "ops": 2.0,
+    "GB": 8.05306,
+    "kernel_s": 0.42037
+   },
+   "AllGather/large": {
+    "ops": 0.77,
+    "GB": 3.10043,
+    "kernel_s": 0.13487
+   }
+  }
+ },
+ "0x12883588efaa6a": {
+  "shape": "n4/nodes1/stride1",
+  "members": {
+   "28": "nid007220",
+   "29": "nid007220",
+   "30": "nid007220",
+   "31": "nid007220"
+  },
+  "ops": {
+   "AllGather/large": {
+    "ops": 633.48,
+    "GB": 0.66425,
+    "kernel_s": 0.02397
+   }
+  }
+ }
+}

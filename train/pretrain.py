@@ -48,6 +48,8 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
     parser.add_argument("--net-log-dir", help="Write per-step timestamps + NIC byte deltas here (per node).")
     parser.add_argument("--batch-step-marker", help="With train.step_batch_size_schedule: stop before each "
                         "batch-size step and write this file (the job restarts training, see BatchSizeStepCallback).")
+    parser.add_argument("--train-time-log", help="JSONL of every step's end time and cumulative training time "
+                        "(kept across jobs); also logs time/* and vs_time/* charts to W&B.")
     parser.add_argument("--dry-run", action="store_true", help="Resolve and print the config, then exit.")
     args, rest = parser.parse_known_args(argv)
     overrides = []
@@ -429,6 +431,150 @@ class BatchSizeStepCallback:
                         current, upcoming, ts.step + 1)
 
 
+class TrainTimeCallback:
+    """Wall-clock time of every step and the run's cumulative training time, across jobs.
+
+    Training time = time spent in the training loop (from ``on_train_start`` of each process, so
+    the first step's compile and CUDA-graph capture, evals and checkpoint saves count; queueing,
+    container start and checkpoint loading do not), summed over all jobs and restarts of the run.
+    The last rank (the W&B rank, last pipeline stage: it holds the loss) appends
+    ``{"iter", "end_unix", "train_s", "lm_loss"}`` per step to ``path`` and logs ``time/train_hours``,
+    ``time/end_unix`` and ``vs_time/<loss>`` to W&B; the ``vs_time/*`` charts use
+    ``time/train_hours`` as their x-axis. A resumed run continues from the record of the iteration
+    it resumed from (later records belong to steps that were lost and are repeated).
+    """
+
+    def __init__(self, path: str, data_wait: "DataWaitTimer | None" = None) -> None:
+        from megatron.bridge.utils.common_utils import get_rank_safe, get_world_size_safe
+
+        self.enabled = get_rank_safe() == get_world_size_safe() - 1
+        self.data_wait = data_wait  # its step-end callback must run first
+        self.path = Path(path)
+        self.base_s = 0.0
+        self.t_start = 0.0
+        self.defined = False
+
+    def on_train_start(self, context) -> None:
+        if not self.enabled:
+            return
+        start_iter = context.state.train_state.step
+        if self.path.exists():
+            for line in self.path.read_text().splitlines():
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if rec.get("iter", 0) <= start_iter:
+                    self.base_s = float(rec["train_s"])
+        self.t_start = time.time()
+        logger.info("training time so far: %.2f h (resuming at iteration %d)", self.base_s / 3600, start_iter)
+
+    @staticmethod
+    def _value(v) -> float | None:
+        try:
+            if isinstance(v, (tuple, list)):  # (sum, count)
+                return float(v[0]) / max(float(v[1]), 1.0)
+            return float(v.float().mean()) if hasattr(v, "float") else float(v)
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    def on_train_step_end(self, context) -> None:
+        if not self.enabled:
+            return
+        now = time.time()
+        train_s = self.base_s + (now - self.t_start)
+        step = context.state.train_state.step + 1  # Bridge advances the step after this callback
+        losses = {k: self._value(v) for k, v in (context.loss_dict or {}).items()}
+        losses = {k: v for k, v in losses.items() if v is not None}
+        with open(self.path, "a") as f:
+            f.write(json.dumps({"iter": step, "end_unix": round(now, 3), "train_s": round(train_s, 3),
+                                "lm_loss": losses.get("lm loss"),
+                                **(self.data_wait.last if self.data_wait else {})}) + "\n")
+        wb = context.state.wandb_logger
+        if wb is not None:
+            if not self.defined:
+                wb.define_metric("time/train_hours")
+                wb.define_metric("vs_time/*", step_metric="time/train_hours")
+                self.defined = True
+            wb.log({"time/train_hours": train_s / 3600, "time/end_unix": now,
+                    **{f"vs_time/{k}": v for k, v in losses.items()}}, step=step)
+
+
+class DataWaitTimer:
+    """Host time every rank spends blocked in ``next(data_iterator)``, i.e. waiting for its
+    dataloader workers, summed per step.
+
+    A rank that waits for data (e.g. the workers stuck on a slow filesystem read) holds up all
+    ranks at the next collective, so the step stalls without any network traffic (job 3708048).
+    Megatron's own ``batch-generator`` timer measures the same but synchronizes the GPU on every
+    micro-batch; this one only reads a host clock. At each step end the per-rank sums are
+    all-gathered (one 4-byte-per-rank collective); a rank that waited more than ``warn_s`` logs a
+    warning with its host, and the last rank logs ``time/data_wait_max_s``, ``time/data_wait_mean_s``
+    and ``time/data_wait_max_rank`` to W&B and to the train-time log.
+    """
+
+    def __init__(self, warn_s: float = 30.0) -> None:
+        from megatron.bridge.utils.common_utils import get_rank_safe, get_world_size_safe
+
+        self.rank = get_rank_safe()
+        self.is_last = self.rank == get_world_size_safe() - 1
+        self.warn_s = warn_s
+        self.wait_s = 0.0
+        self.last: dict[str, float] = {}
+
+    class _Iterator:
+        def __init__(self, it, owner: "DataWaitTimer") -> None:
+            self._it, self._owner = it, owner
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            t = time.perf_counter()
+            try:
+                return next(self._it)
+            finally:
+                self._owner.wait_s += time.perf_counter() - t
+
+        def __getattr__(self, name):
+            return getattr(self._it, name)
+
+    def wrap(self, forward_step):
+        """``forward_step`` with its data iterator timed (same signature, so Bridge still injects the state)."""
+        owner = self
+
+        def timed_forward_step(state, data_iterator, model, return_schedule_plan: bool = False):
+            if data_iterator is not None:
+                data_iterator = DataWaitTimer._Iterator(data_iterator, owner)
+            return forward_step(state, data_iterator, model, return_schedule_plan)
+
+        return timed_forward_step
+
+    def on_train_step_start(self, context) -> None:
+        self.wait_s = 0.0  # evaluation between steps does not count
+
+    def on_train_step_end(self, context) -> None:
+        import torch
+
+        step = context.state.train_state.step + 1
+        if self.wait_s > self.warn_s:
+            logger.warning("step %d: rank %d on %s waited %.1f s for data", step, self.rank,
+                           socket.gethostname(), self.wait_s)
+        if not torch.distributed.is_initialized():
+            return
+        mine = torch.tensor([self.wait_s], dtype=torch.float32, device="cuda")
+        every = torch.empty(torch.distributed.get_world_size(), dtype=torch.float32, device="cuda")
+        torch.distributed.all_gather_into_tensor(every, mine)
+        if self.is_last:
+            every = every.tolist()
+            worst = max(range(len(every)), key=every.__getitem__)
+            self.last = {"data_wait_max_s": round(every[worst], 3), "data_wait_max_rank": worst,
+                         "data_wait_mean_s": round(sum(every) / len(every), 3)}
+            wb = context.state.wandb_logger
+            if wb is not None:
+                wb.log({f"time/{k}": v for k, v in self.last.items()}, step=step)
+
+
 def main(argv: list[str] | None = None) -> None:
     """Build the config and run pretraining."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
@@ -459,6 +605,14 @@ def main(argv: list[str] | None = None) -> None:
         net = NetTrafficCallback(args.net_log_dir)
         callbacks.register("on_train_step_start", net.on_train_step_start)
         callbacks.register("on_train_step_end", net.on_train_step_end)
+    data_wait = DataWaitTimer()
+    callbacks.register("on_train_step_start", data_wait.on_train_step_start)
+    callbacks.register("on_train_step_end", data_wait.on_train_step_end)
+    forward_step = data_wait.wrap(forward_step)
+    if args.train_time_log:
+        tt = TrainTimeCallback(args.train_time_log, data_wait)
+        callbacks.register("on_train_start", tt.on_train_start)
+        callbacks.register("on_train_step_end", tt.on_train_step_end)
     if args.batch_step_marker and cfg.train.step_batch_size_schedule:
         if not (cfg.checkpoint.save and cfg.checkpoint.load):
             raise SystemExit("--batch-step-marker needs checkpoint.save and checkpoint.load (the restart resumes)")

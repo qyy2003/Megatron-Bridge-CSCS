@@ -1,0 +1,55 @@
+# Patch: checkpoint metadata for Muon with ZeRO-1 (part of the muon-zero1 set)
+#
+# Problem:   with ddp.use_layer_wise_param_layout the non-Muon params are handled by a
+#            DistributedOptimizer sub-optimizer, but optimizer.use_distributed_optimizer stays off,
+#            so Bridge builds no distrib_optim_sharding_type metadata and that sub-optimizer saves in
+#            the deprecated fully_sharded_model_space format: "ShardedTensor.flattened_range is not
+#            supported" at the first save (job 3706970).
+# What:      _has_distributed_optimizer(cfg) = optimizer.use_distributed_optimizer or
+#            ddp.use_layer_wise_param_layout, used where the save metadata is built (as Megatron-LM
+#            does with use_layer_wise_distributed_optimizer).
+# Porting:   the _build_sharded_state_dict_metadata call sites in training/checkpointing.py.
+#
+diff --git a/src/megatron/bridge/training/checkpointing.py b/src/megatron/bridge/training/checkpointing.py
+index 091d755a9..8b22d3a64 100644
+--- a/src/megatron/bridge/training/checkpointing.py
++++ b/src/megatron/bridge/training/checkpointing.py
+@@ -1208,9 +1208,9 @@ def save_checkpoint(
+     rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
+ 
+     # Collect cfg, model, RNG.
+-    sharded_sd_metadata = _build_sharded_state_dict_metadata(cfg.optimizer.use_distributed_optimizer, ckpt_cfg)
++    sharded_sd_metadata = _build_sharded_state_dict_metadata(_has_distributed_optimizer(cfg), ckpt_cfg)
+     sharded_sd_metadata["dp_cp_group"] = pg_collection.dp_cp
+-    if cfg.optimizer.use_distributed_optimizer:
++    if _has_distributed_optimizer(cfg):
+         print_rank_0(
+             f"Storing distributed optimizer sharded state of type {sharded_sd_metadata['distrib_optim_sharding_type']}"
+         )
+@@ -2779,7 +2779,7 @@ def _load_checkpoint_from_path(
+         if ckpt_type == CheckpointType.LOCAL:
+             # Local checkpoints don't store content metadata in common.pt.
+             sharded_sd_metadata = _build_sharded_state_dict_metadata(
+-                cfg.optimizer.use_distributed_optimizer, cfg.checkpoint
++                _has_distributed_optimizer(cfg), cfg.checkpoint
+             )
+         else:
+             sharded_sd_metadata = dist_checkpointing.load_content_metadata(preloaded_state_dict=state_dict)
+@@ -3796,6 +3796,17 @@ def _build_sharded_state_dict_metadata(use_distributed_optimizer: bool, cfg: Che
+     return metadata
+ 
+ 
++def _has_distributed_optimizer(cfg) -> bool:
++    """Whether the optimizer contains a DistributedOptimizer.
++
++    Muon with ``ddp.use_layer_wise_param_layout`` keeps ``optimizer.use_distributed_optimizer``
++    off, but its non-Muon params (embeddings, norms, biases) are handled by a DistributedOptimizer
++    sub-optimizer, which needs the same sharding-type metadata (as in Megatron-LM's
++    ``_build_sharded_state_dict_metadata``).
++    """
++    return bool(cfg.optimizer.use_distributed_optimizer or getattr(cfg.ddp, "use_layer_wise_param_layout", False))
++
++
+ def _get_train_state_from_state_dict(state_dict: dict[str, Any]) -> TrainState:
+     """Create a TrainState from the state dict from a Megatron-LM checkpoint."""
+     legacy_train_state = TrainState()

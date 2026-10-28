@@ -53,6 +53,11 @@ logger:
   log_throughput_to_tensorboard: true
   throughput_window_size: 10
   log_timers_to_tensorboard: true
+  # Level 1: once-per-step phases, printed every step with min/max over ranks and sent to W&B:
+  # forward-backward, all-grads-sync (gradient reduction left after the backward = exposed DP
+  # communication), params-all-gather, optimizer. Level 2 adds per-micro-batch timers that
+  # synchronize the GPU 32+ times per step; the data wait is timed in train/pretrain.py instead.
+  timing_log_level: 1
   log_memory_to_tensorboard: true
   log_params_norm: false
 

@@ -119,6 +119,29 @@ the pinned commits, image/data/tokenizer present, generated script parses) and
 Knobs are environment variables, see the header of `launch.sh`; any config field can be set
 with `EXTRA="key=value ..."`. A broken node can be avoided with `SBATCH_EXCLUDE=nid00XXXX`.
 
+### Short experiments: optimizers, inter-datacenter split, per-job patches
+
+```bash
+OPTIMIZER=muon MAX_STEPS=500 WALLTIME=04:00:00 MAX_RESUBMITS=0 ./launch.sh train 8 1T
+OPTIMIZER=muon-zero1 GLOBAL_DP=2 MAX_STEPS=500 WALLTIME=04:00:00 MAX_RESUBMITS=0 ./launch.sh train 8 1T
+```
+
+- `MAX_STEPS=N` stops at step N but keeps the batch and LR schedules of the full token budget, so
+  the short run is the start of the long one (run name `-max<N>`, own checkpoints).
+- `OPTIMIZER=adam` (recipe, ZeRO-1) | `muon` (Megatron-Core's layer-wise Muon, Kimi-K2 settings,
+  no ZeRO) | `muon-zero1` (Muon with DeepSeek-V4-style shard-aligned ZeRO-1, optional patch set
+  `muon-zero1`).
+- `GLOBAL_DP=N` splits the nodes into N "datacenters" that each hold a full model replica
+  (`ddp.num_distributed_optimizer_instances`): pipeline, expert all-to-all and the gradient
+  reduce-scatter / parameter all-gather stay inside a datacenter, and the gradient shards are
+  all-reduced between datacenters once per step. Works with `adam` and `muon-zero1`.
+- `PATCHES=set1,set2` applies optional patch sets `patches/optional/<set>/` to this job only (its own
+  code snapshot, so jobs with different sets can run at the same time); see
+  `patches/optional/README.md`.
+
+Results of the 8-node, 500-step comparison (Adam vs Muon vs Muon ZeRO-1 + GLOBAL_DP=2: loss, step
+time, network per step, who talks to whom on the dragonfly): `analysis/2026-10-21-adam-muon-gdp2/REPORT.md`.
+
 ### Global batch size ramp (DeepSeek-style)
 
 In train mode the budget is given in tokens and the global batch grows like DeepSeek-V2/V3
@@ -292,6 +315,17 @@ recipe's own hyper-parameters differ (seq 8192, LR 1.6e-3→1.6e-5, warmup 333, 
   One W&B run per experiment, continued across resubmitted jobs (`WANDB_RUN_ID` is stored in
   the run directory). Disabled when `WANDB_API_KEY` is empty.
 - **TensorBoard**: `$RUN_DIR/tensorboard`.
+- **Training time**: `$RUN_DIR/logs/train_time.jsonl` (per step: end time, cumulative time in the
+  training loop over all jobs of the run, LM loss) and W&B `time/train_hours` with `vs_time/<loss>`
+  charts (loss against training time).
+- **Per-phase timers** (`logger.timing_log_level: 1`): W&B / TensorBoard `forward-backward-time`,
+  `all-grads-sync-time` (gradient reduction left after the backward, i.e. exposed DP
+  communication), `optimizer-time` and its parts. Console printing is suppressed (the W&B write
+  resets them). Cost in the smoke run: +2.7% on 0.9-s steps (fixed per step, ~0.2% at 13 s).
+- **Data wait** (`train/pretrain.py` `DataWaitTimer`): host time each rank spends in
+  `next(data_iterator)` per step, no GPU sync; W&B `time/data_wait_{max,mean}_s` and
+  `time/data_wait_max_rank`, the same in `train_time.jsonl`, and a warning with the host when a rank
+  waits more than 30 s (a rank stuck on data stalls every rank at the next collective, job 3708048).
 - **Network traffic** (`NETLOG`, default 2), in `$RUN_DIR/netlogs/job_<id>/`:
 
   | Level | What | Where |

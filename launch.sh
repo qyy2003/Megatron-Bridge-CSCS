@@ -34,6 +34,13 @@
 #   PP_LAYOUT [PP=2: Et*21|t*19mL]  uneven pipeline split (Megatron layout string: E embedding,
 #                       t layer, m MTP, L loss, stages split by |, PP*VPP stages); the last stage also
 #                       carries both 248k-vocab output heads and the MTP layer. "" = even split
+#   GLOBAL_DP [1]       >1 = split the nodes into GLOBAL_DP "datacenters", each a full model replica
+#                       (inter-datacenter training): pipeline, expert all-to-all and the gradient
+#                       reduce-scatter / parameter all-gather stay inside a datacenter, and once per
+#                       step the gradient shards are all-reduced between datacenters
+#                       (ddp.num_distributed_optimizer_instances). With PP=2 on 8 nodes and GLOBAL_DP=2:
+#                       nodes 1,2,5,6 | 3,4,7,8. Each datacenter keeps its own optimizer state, so that
+#                       state takes GLOBAL_DP x the memory (~+13 GB/GPU on stage 0 at 8 nodes)
 #   EP_OVERLAP [0]      1 = overlap the MoE dispatch/combine of one microbatch with another's compute
 #                       (comm_overlap.overlap_moe_expert_parallel_comm; needs VPP when PP > 1)
 #   MBS [1] GBS [512] SEQ_LEN [4096]      micro/global batch, sequence length (recipe values)
@@ -66,6 +73,25 @@
 #   CRASH_RETRIES [2]   train mode: after a crashed job (NCCL timeout, GPU error, ...) resubmit from the last
 #                       checkpoint, at most this many times without a new checkpoint in between
 #   WALLTIME PARTITION MAX_RESUBMITS [200] EXP_SUFFIX
+#   OPTIMIZER [adam]    adam (recipe: distributed AdamW, ZeRO-1) | muon: Megatron-Core's layer-wise
+#                       distributed Muon (dist_muon; Muon for weight matrices, Adam for embeddings,
+#                       norms, router) with Kimi-K2's settings (momentum 0.95, Nesterov, spectral scaling,
+#                       5 Newton-Schulz steps); same LR schedule, weight decay and bf16 gradient reduction
+#                       as adam. Muon cannot use ZeRO-1, so it also turns off ddp/optimizer
+#                       use_distributed_optimizer and overlap_param_gather. Run name "-muon"
+#                       | muon-zero1: the same Muon with ZeRO-1 (DeepSeek-V4 style): gradients
+#                       reduce-scattered into shard-aligned buffers so each rank holds whole Muon
+#                       matrices, non-Muon params in a regular distributed optimizer. Applies the
+#                       optional patch set muon-zero1 (which also supports GLOBAL_DP>1). Run name
+#                       "-muon-zero1"
+#   MAX_STEPS           stop the run at this step while the batch-size schedule and the LR schedule stay
+#                       those of the full token budget (a short run identical to the start of the long
+#                       one); train runs get "-max<N>" in their name, so they never share the full run's
+#                       checkpoints
+#   PATCHES             optional patch sets for this job only, comma-separated:
+#                       patches/optional/<set>/{megatron-bridge,megatron-lm}/*.patch, applied after the
+#                       always-on patches. Each combination gets its own code snapshot and the run its own
+#                       name ("-p<set>"), so jobs with different sets can be queued together
 #   EXTRA               more KEY=VALUE overrides, e.g. EXTRA="optimizer.weight_decay=0.05"
 set -euo pipefail
 
@@ -92,6 +118,16 @@ MBS=${MBS:-1}; SEQ_LEN=${SEQ_LEN:-4096}
 GRAD_FP32=${GRAD_FP32:-0}; CUDA_GRAPHS=${CUDA_GRAPHS:-1}; RECOMPUTE=${RECOMPUTE:-none}
 DISPATCHER=${DISPATCHER:-auto}
 EXCLUDE_FLAKY=${EXCLUDE_FLAKY:-1}
+PATCHES=${PATCHES:-}
+GLOBAL_DP=${GLOBAL_DP:-1}
+OPTIMIZER=${OPTIMIZER:-adam}
+case $OPTIMIZER in adam|muon|muon-zero1) ;; *) echo "OPTIMIZER must be adam, muon or muon-zero1"; exit 1 ;; esac
+if [ "$OPTIMIZER" = muon-zero1 ] && [[ ",$PATCHES," != *,muon-zero1,* ]]; then
+    PATCHES=${PATCHES:+$PATCHES,}muon-zero1
+fi
+for set in ${PATCHES//,/ }; do
+    [ -d "$WORKDIR/patches/optional/$set" ] || { echo "PATCHES: no patch set patches/optional/$set"; exit 1; }
+done
 VPP=${VPP:-}; EP_OVERLAP=${EP_OVERLAP:-0}
 # Default uneven split for PP=2: the last stage also runs both 248k-vocab output heads and the MTP
 # layer. On real data 21/19 is as fast as 23/17 (the mock-data optimum, which assumes balanced
@@ -179,7 +215,29 @@ if [ -n "${GBS_SCHEDULE:-}" ] || [ "$GBS_RAMP" != none ] || [ -n "${TRAIN_TOKENS
         CKPT=save_load   # every batch-size step resumes from the checkpoint written at the step
     fi
 fi
+if [ -n "${MAX_STEPS:-}" ]; then
+    (( MAX_STEPS > 0 && MAX_STEPS < STEPS )) || { echo "MAX_STEPS=$MAX_STEPS must be between 1 and the run's $STEPS steps"; exit 1; }
+    # Keep the full run's LR decay length (with a batch schedule it is already set explicitly).
+    [ "$BATCH_SCHEDULE" = 1 ] || OVERRIDES+=(scheduler.lr_decay_iters=${LR_DECAY_ITERS:-$STEPS})
+    echo "MAX_STEPS: stopping at step $MAX_STEPS of $STEPS (schedules unchanged)"
+    STEPS=$MAX_STEPS
+fi
 if (( GBS % (MBS * DP) != 0 )); then echo "GBS=$GBS must be a multiple of MBS*DP=$((MBS * DP))"; exit 1; fi
+if [ "$OPTIMIZER" != adam ]; then
+    [ "$OPTIMIZER" = muon ] && (( GLOBAL_DP > 1 )) && { echo "OPTIMIZER=muon with GLOBAL_DP>1: Megatron-Core's legacy layer-wise Muon has no optimizer instances; use OPTIMIZER=muon-zero1"; exit 1; }
+    OVERRIDES+=(optimizer.optimizer=dist_muon optimizer.muon_momentum=0.95 optimizer.muon_nesterov=true
+                optimizer.muon_scale_mode=spectral optimizer.muon_num_ns_steps=5 optimizer.muon_scalar_optimizer=adam
+                ddp.use_distributed_optimizer=false optimizer.use_distributed_optimizer=false
+                ddp.overlap_param_gather=false optimizer.overlap_param_gather=false
+                comm_overlap.overlap_param_gather=false)
+    [ "$OPTIMIZER" = muon-zero1 ] && OVERRIDES+=(ddp.use_layer_wise_param_layout=true)
+fi
+if (( GLOBAL_DP > 1 )); then
+    EXPT_DP=$(( NODES * 4 / (EP * ETP * PP) ))
+    (( DP % GLOBAL_DP == 0 && EXPT_DP % GLOBAL_DP == 0 )) \
+        || { echo "GLOBAL_DP=$GLOBAL_DP must divide DP=$DP and expert DP=$EXPT_DP"; exit 1; }
+    OVERRIDES+=(ddp.num_distributed_optimizer_instances=$GLOBAL_DP)
+fi
 if [ -n "$VPP" ]; then
     (( PP > 1 )) || { echo "VPP needs PP > 1"; exit 1; }
     (( $(model_layers) % (PP * VPP) == 0 )) || { echo "layers ($(model_layers)) not divisible by PP*VPP=$((PP * VPP))"; exit 1; }
@@ -280,15 +338,23 @@ TAG="q35a3b-${NODES}n-ep${EP}"
 TAG+="-mbs${MBS}-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}"
 [ "$GRAD_FP32" = 1 ] && TAG+="-gf32"; [ "$CUDA_GRAPHS" = 0 ] && TAG+="-nocg"; [ "$RECOMPUTE" != none ] && TAG+="-rc"
 [ "$DISPATCHER" != alltoall ] && TAG+="-$DISPATCHER"; [ "$EP_OVERLAP" = 1 ] && TAG+="-epov"
+GDP_TAG=""; (( GLOBAL_DP > 1 )) && GDP_TAG="-gdp$GLOBAL_DP"
+OPT_TAG=""; [ "$OPTIMIZER" != adam ] && OPT_TAG="-$OPTIMIZER"
+PTAG=""   # optional patch sets in the run name, except the one OPTIMIZER=muon-zero1 implies
+for set in ${PATCHES//,/ }; do
+    [ "$OPTIMIZER" = muon-zero1 ] && [ "$set" = muon-zero1 ] && continue
+    PTAG+="${PTAG:++}$set"
+done
+RUN_TAGS="${OPT_TAG}${GDP_TAG}${MAX_STEPS:+-max$MAX_STEPS}${PTAG:+-p$PTAG}"
 if [ "$MODE" = train ]; then
     # Stable across resubmissions and node counts: torch_dist checkpoints reshard on load
     # across data-parallel sizes, so only data-semantic settings are in the name. The
     # optimizer state is saved DP-reshardable (Megatron default), so TP/PP/CP/EP/ETP/VPP must
     # stay fixed for the life of a run (checked below) unless it was saved with
     # checkpoint.dist_ckpt_optim_fully_reshardable=true.
-    EXP_NAME="train-q35a3b-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}${EXP_SUFFIX:+-$EXP_SUFFIX}"
+    EXP_NAME="train-q35a3b-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}${RUN_TAGS}${EXP_SUFFIX:+-$EXP_SUFFIX}"
 else
-    EXP_NAME="${MODE}-${TAG}${EXP_SUFFIX:+-$EXP_SUFFIX}"
+    EXP_NAME="${MODE}-${TAG}${RUN_TAGS}${EXP_SUFFIX:+-$EXP_SUFFIX}"
 fi
 # A dry run gets its own run directory: it must not create (and leave files in) the real one.
 [ "${DRYRUN:-0}" = 1 ] && EXP_NAME+="-dryrun"
@@ -297,7 +363,7 @@ RUN_DIR=$RUN_ROOT/$EXP_NAME
 SCRIPT="$WORKDIR/logs/${JOB_NAME}.sbatch"
 mkdir -p "$WORKDIR/logs"
 if [ "$MODE" = train ] && [ "${DRYRUN:-0}" != 1 ]; then
-    LAYOUT="TP=$TP PP=$PP CP=$CP EP=$EP ETP=$ETP${VPP:+ VPP=$VPP}${PP_LAYOUT:+ LAYOUT=$PP_LAYOUT}"
+    LAYOUT="TP=$TP PP=$PP CP=$CP EP=$EP ETP=$ETP${VPP:+ VPP=$VPP}${PP_LAYOUT:+ LAYOUT=$PP_LAYOUT}${GDP_TAG:+ GLOBAL_DP=$GLOBAL_DP}${OPT_TAG:+ OPTIMIZER=$OPTIMIZER}"
     OLD_LAYOUT=$(cat "$RUN_DIR/layout" 2>/dev/null || true)
     if [ -s "$RUN_DIR/checkpoints/latest_checkpointed_iteration.txt" ] && [ -n "$OLD_LAYOUT" ] \
             && [ "$OLD_LAYOUT" != "$LAYOUT" ] && [ "${FORCE_LAYOUT:-0}" != 1 ]; then
@@ -392,6 +458,7 @@ SUMMARIZE=$SUMMARIZE
 RESUBMIT=$RESUBMIT
 MAX_RESUBMITS=$MAX_RESUBMITS
 EXCLUDE_FLAKY=$EXCLUDE_FLAKY
+PATCHES=$(printf %q "$PATCHES")
 CRASH_RETRIES=${CRASH_RETRIES:-2}
 TRAIN_ITERS=$STEPS
 BATCH_SCHEDULE=$BATCH_SCHEDULE
