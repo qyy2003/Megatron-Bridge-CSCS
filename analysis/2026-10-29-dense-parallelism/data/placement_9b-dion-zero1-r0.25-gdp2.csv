@@ -1,0 +1,12 @@
+shape,op,size_class,ops,tenth_0,tenth_1,tenth_2,tenth_3,tenth_4,tenth_5,tenth_6,tenth_7,tenth_8,tenth_9
+n16/nodes4/stride1,AllGather,small,286,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+n16/nodes4/stride1,AllReduce,small,353,0.841,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.159
+n2/nodes2/stride4,AllReduce,large,303,0.799,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.201
+n2/nodes2/stride4,AllReduce,small,38,0.763,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.237
+n2/nodes2/stride8,AllReduce,large,38,0.763,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.237
+n2/nodes2/stride8,AllReduce,small,169,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+n2/nodes2/stride8,Recv,large,3200,0.072,0.107,0.103,0.102,0.107,0.108,0.105,0.102,0.105,0.089
+n2/nodes2/stride8,Send,large,3200,0.088,0.107,0.103,0.102,0.107,0.108,0.105,0.102,0.105,0.073
+n4/nodes1/stride1,AllGather,large,407,0.975,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.025
+n4/nodes1/stride1,ReduceScatter,large,418,0.28,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.72
+n8/nodes2/stride1,AllReduce,small,76,0.763,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.237

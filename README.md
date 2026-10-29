@@ -126,6 +126,12 @@ OPTIMIZER=muon MAX_STEPS=500 WALLTIME=04:00:00 MAX_RESUBMITS=0 ./launch.sh train
 OPTIMIZER=muon-zero1 GLOBAL_DP=2 MAX_STEPS=500 WALLTIME=04:00:00 MAX_RESUBMITS=0 ./launch.sh train 8 1T
 ```
 
+- `MODEL=35b-a3b|0.8b|2b|4b|9b`: Qwen3.5-35B-A3B (default, MoE) or a Qwen3.5 dense model. The dense
+  sizes use NVIDIA's GB200 Qwen3.5-9B text recipe built from each size's HF config
+  (`Qwen/Qwen3.5-<size>-Base`; same tokenizer, so the tokenized data is shared), default to pure data
+  parallelism (EP 1, PP 1) and work with every `OPTIMIZER` and `GLOBAL_DP`. Layouts that fit and are
+  fastest: `analysis/2026-10-29-dense-parallelism/REPORT.md` (0.8B/2B: MBS 2; 4B: MBS 1; 9B: TP 2 MBS 2, or
+  PP 2 for Dion). Each model logs to its own W&B project `qwen35-<model>-cscs`.
 - `MAX_STEPS=N` stops at step N but keeps the batch and LR schedules of the full token budget, so
   the short run is the start of the long one (run name `-max<N>`, own checkpoints).
 - `OPTIMIZER=adam` (recipe, ZeRO-1) | `muon` (Megatron-Core's layer-wise Muon, Kimi-K2 settings,
@@ -327,6 +333,10 @@ recipe's own hyper-parameters differ (seq 8192, LR 1.6e-3→1.6e-5, warmup 333, 
 - **Training time**: `$RUN_DIR/logs/train_time.jsonl` (per step: end time, cumulative time in the
   training loop over all jobs of the run, LM loss) and W&B `time/train_hours` with `vs_time/<loss>`
   charts (loss against training time).
+- **Perplexity**: training PPL = exp(loss of the step) as W&B `ppl/lm loss` (and `vs_time/ppl lm loss`,
+  `lm_ppl` in `train_time.jsonl`); validation PPL as `lm loss validation ppl` (Bridge, enabled in the
+  profile). `FINAL_EVAL=0` (default with `MAX_STEPS`) skips Bridge's validation + test passes after the
+  last step, which repeat the last step's evaluation.
 - **Per-phase timers** (`logger.timing_log_level: 1`): W&B / TensorBoard `forward-backward-time`,
   `all-grads-sync-time` (gradient reduction left after the backward, i.e. exposed DP
   communication), `optimizer-time` and its parts. Console printing is suppressed (the W&B write

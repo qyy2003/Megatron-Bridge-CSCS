@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import math
 import logging
 import os
 import socket
@@ -40,7 +41,7 @@ CXI_BYTE_COUNTERS = ("hni_sts_tx_ok_octets", "hni_sts_rx_ok_octets")
 def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
     """Parse runner arguments; everything of the form KEY=VALUE is a config override."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--recipe", default=DEFAULT_RECIPE, help="Exported megatron.bridge.recipes function.")
+    parser.add_argument("--recipe", default=DEFAULT_RECIPE, help="Exported megatron.bridge.recipes function, or qwen35_text_dense:<0.8B|2B|4B|9B>.")
     parser.add_argument("--profile", action="append", default=[], help="YAML merged onto the recipe (repeatable).")
     parser.add_argument("--blend", help="Blend JSON from data/build_blend.py. Omit for mock data.")
     parser.add_argument("--nsys-steps", help="START:END global steps captured by nsys (needs the nsys wrapper).")
@@ -48,6 +49,9 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
     parser.add_argument("--net-log-dir", help="Write per-step timestamps + NIC byte deltas here (per node).")
     parser.add_argument("--batch-step-marker", help="With train.step_batch_size_schedule: stop before each "
                         "batch-size step and write this file (the job restarts training, see BatchSizeStepCallback).")
+    parser.add_argument("--final-eval", type=int, default=1, choices=(0, 1),
+                        help="0 = skip Bridge's validation + test passes after the last training step "
+                             "(for runs whose last step is already an evaluation step).")
     parser.add_argument("--train-time-log", help="JSONL of every step's end time and cumulative training time "
                         "(kept across jobs); also logs time/* and vs_time/* charts to W&B.")
     parser.add_argument("--dry-run", action="store_true", help="Resolve and print the config, then exit.")
@@ -60,8 +64,37 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
     return args, overrides
 
 
+QWEN35_DENSE_SIZES = ("0.8B", "2B", "4B", "9B")
+
+
+def qwen35_text_dense_config(size: str):
+    """Text-only pretraining config of a Qwen3.5 dense model (0.8B, 2B, 4B, 9B).
+
+    Megatron-Bridge v0.6.2 ships a text pretraining recipe for the 9B only
+    (``qwen35_text_9b_pretrain_8gpu_gb200_bf16_config``). The dense sizes share its architecture
+    (hybrid Gated DeltaNet / gated attention 3:1, one MTP layer, the same tokenizer), so the
+    smaller ones use the same recipe built from their own HF config ``Qwen/Qwen3.5-<size>-Base``
+    (config + tokenizer files in HF_HOME; no weights: training from scratch).
+    """
+    from megatron.bridge.recipes.qwen.gb200 import qwen35 as recipe_module
+
+    if size not in QWEN35_DENSE_SIZES:
+        raise SystemExit(f"Qwen3.5 dense size must be one of {QWEN35_DENSE_SIZES}, got {size!r}")
+    if size == "9B":
+        return recipe_module.qwen35_text_9b_pretrain_8gpu_gb200_bf16_config()
+    official = recipe_module._QWEN35_9B_BASE
+    recipe_module._QWEN35_9B_BASE = f"Qwen/Qwen3.5-{size}-Base"  # read by the recipe function only
+    try:
+        return recipe_module.qwen35_text_9b_pretrain_8gpu_gb200_bf16_config()
+    finally:
+        recipe_module._QWEN35_9B_BASE = official
+
+
 def load_recipe(name: str):
-    """Return the ConfigContainer built by an exported Megatron-Bridge recipe function."""
+    """Return the ConfigContainer of an exported Megatron-Bridge recipe function, or of
+    ``qwen35_text_dense:<size>`` (:func:`qwen35_text_dense_config`)."""
+    if name.startswith("qwen35_text_dense:"):
+        return qwen35_text_dense_config(name.split(":", 1)[1])
     recipes = importlib.import_module("megatron.bridge.recipes")
     if not hasattr(recipes, name):
         raise SystemExit(f"recipe {name!r} is not exported by megatron.bridge.recipes")
@@ -438,9 +471,11 @@ class TrainTimeCallback:
     the first step's compile and CUDA-graph capture, evals and checkpoint saves count; queueing,
     container start and checkpoint loading do not), summed over all jobs and restarts of the run.
     The last rank (the W&B rank, last pipeline stage: it holds the loss) appends
-    ``{"iter", "end_unix", "train_s", "lm_loss"}`` per step to ``path`` and logs ``time/train_hours``,
-    ``time/end_unix`` and ``vs_time/<loss>`` to W&B; the ``vs_time/*`` charts use
-    ``time/train_hours`` as their x-axis. A resumed run continues from the record of the iteration
+    ``{"iter", "end_unix", "train_s", "lm_loss", "lm_ppl"}`` per step to ``path`` and logs
+    ``time/train_hours``, ``time/end_unix``, ``vs_time/<loss>`` and the training perplexity
+    ``ppl/<loss>`` = exp(loss of the step) (also ``vs_time/ppl <loss>``) to W&B; the ``vs_time/*``
+    charts use ``time/train_hours`` as their x-axis. Validation perplexity is Bridge's own
+    ``<loss> validation ppl`` (logger.log_validation_ppl_to_tensorboard in the profile). A resumed run continues from the record of the iteration
     it resumed from (later records belong to steps that were lost and are repeated).
     """
 
@@ -470,6 +505,11 @@ class TrainTimeCallback:
         logger.info("training time so far: %.2f h (resuming at iteration %d)", self.base_s / 3600, start_iter)
 
     @staticmethod
+    def _ppl(loss: float) -> float:
+        """exp(loss), capped like Bridge's validation PPL (exp(min(20, loss)))."""
+        return math.exp(min(20.0, loss))
+
+    @staticmethod
     def _value(v) -> float | None:
         try:
             if isinstance(v, (tuple, list)):  # (sum, count)
@@ -486,9 +526,11 @@ class TrainTimeCallback:
         step = context.state.train_state.step + 1  # Bridge advances the step after this callback
         losses = {k: self._value(v) for k, v in (context.loss_dict or {}).items()}
         losses = {k: v for k, v in losses.items() if v is not None}
+        ppls = {k: self._ppl(v) for k, v in losses.items() if k.endswith(" loss") and "balancing" not in k}
         with open(self.path, "a") as f:
             f.write(json.dumps({"iter": step, "end_unix": round(now, 3), "train_s": round(train_s, 3),
                                 "lm_loss": losses.get("lm loss"),
+                                "lm_ppl": round(ppls["lm loss"], 4) if "lm loss" in ppls else None,
                                 **(self.data_wait.last if self.data_wait else {})}) + "\n")
         wb = context.state.wandb_logger
         if wb is not None:
@@ -497,7 +539,31 @@ class TrainTimeCallback:
                 wb.define_metric("vs_time/*", step_metric="time/train_hours")
                 self.defined = True
             wb.log({"time/train_hours": train_s / 3600, "time/end_unix": now,
-                    **{f"vs_time/{k}": v for k, v in losses.items()}}, step=step)
+                    **{f"vs_time/{k}": v for k, v in losses.items()},
+                    **{f"ppl/{k}": v for k, v in ppls.items()},
+                    **{f"vs_time/ppl {k}": v for k, v in ppls.items()}}, step=step)
+
+
+class FinalEvalSwitch:
+    """Optionally skip Bridge's validation and test passes after the last training step.
+
+    ``pretrain()`` runs both when ``train()`` returns at the end of the run (planned exits at the
+    walltime limit or a batch-size step leave through ``sys.exit`` before). For a MAX_STEPS run
+    whose last step is an evaluation step they repeat it: the 500-step Muon run spent 75 min there
+    (job 3706874). ``on_train_end`` fires before them; the final checkpoint is already saved.
+    """
+
+    def __init__(self, final_eval: bool) -> None:
+        self.final_eval = final_eval
+
+    def on_train_end(self, context) -> None:
+        ts = context.state.train_state
+        if self.final_eval:
+            return
+        if ts.do_valid or ts.do_test:
+            logger.info("--final-eval 0: skipping the validation/test passes after step %d", ts.step)
+        ts.do_valid = False
+        ts.do_test = False
 
 
 class DataWaitTimer:
@@ -605,6 +671,7 @@ def main(argv: list[str] | None = None) -> None:
         net = NetTrafficCallback(args.net_log_dir)
         callbacks.register("on_train_step_start", net.on_train_step_start)
         callbacks.register("on_train_step_end", net.on_train_step_end)
+    callbacks.register("on_train_end", FinalEvalSwitch(bool(args.final_eval)).on_train_end)
     data_wait = DataWaitTimer()
     callbacks.register("on_train_step_start", data_wait.on_train_step_start)
     callbacks.register("on_train_step_end", data_wait.on_train_step_end)

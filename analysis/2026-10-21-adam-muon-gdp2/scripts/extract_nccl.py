@@ -69,9 +69,9 @@ def main():
         files = sorted(glob.glob(f"{ROOT}/{sub}/nccl-inspector/*.log*"))
         with Pool(16) as p:
             res = p.map(one_rank, [(f, bounds) for f in files])
-        # global rank of each file = its rank in the 32-rank communicator
+        # global rank of each file = its rank in the world communicator
         sizes = collections.Counter(cid for _, comms, _, _ in res for cid in comms)
-        world = [cid for cid, c in sizes.items() if c == 32]
+        world = [cid for cid, c in sizes.items() if c == len(files)]  # the communicator of all ranks
         ranks = [next(comms[c] for c in world if c in comms) for _, comms, _, _ in res]
         members = collections.defaultdict(dict)
         for (host, comms, _, _), g in zip(res, ranks):

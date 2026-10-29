@@ -87,6 +87,7 @@ if [ "$NETLOG" -ge 2 ]; then
 fi
 [ "$NETLOG" -ge 1 ] && TRAIN_ARGS+=(--net-log-dir "$NETLOG_DIR/steps")
 TRAIN_ARGS+=(--train-time-log "$RUN_DIR/logs/train_time.jsonl")
+TRAIN_ARGS+=(--final-eval "${FINAL_EVAL:-1}")
 if [ "$NSYS" = 1 ]; then
     TRAIN_ARGS+=(--nsys-steps "$NSYS_STEPS" --nsys-ranks "$NSYS_RANKS")
     mkdir -p "$NSYS_DIR"

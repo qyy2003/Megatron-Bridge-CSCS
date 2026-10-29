@@ -59,6 +59,8 @@ logger:
   # synchronize the GPU 32+ times per step; the data wait is timed in train/pretrain.py instead.
   timing_log_level: 1
   log_memory_to_tensorboard: true
+  # Validation perplexity (exp of each validation loss) to W&B / TensorBoard as "<loss> validation ppl".
+  log_validation_ppl_to_tensorboard: true
   log_params_norm: false
 
 checkpoint:

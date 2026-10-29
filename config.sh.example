@@ -12,7 +12,7 @@ export SBATCH_ACCOUNT="prep23"
 # The key is only ever read from the environment; generated sbatch files never contain it.
 export WANDB_API_KEY=""
 export WANDB_ENTITY=""                      # optional: team/user, empty = your default entity
-export WANDB_PROJECT="qwen35-35b-a3b-cscs"
+export WANDB_PROJECT="qwen35-35b-a3b-cscs"   # used only with WANDB_PROJECT_FIXED=1; launch.sh uses qwen35-<MODEL>-cscs
 
 # ----------------------------------------------------------------------------
 # Storage (CSCS cleanup policies: files not accessed for 14 days on iopsstor and

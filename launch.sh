@@ -25,6 +25,12 @@
 #   SUBMIT=0 ./launch.sh train 16 1T          # only write logs/<job>.sbatch
 #
 # Knobs (environment variables, [default]):
+#   MODEL [35b-a3b]     35b-a3b: Qwen3.5-35B-A3B (MoE, the official recipe) | 0.8b | 2b | 4b | 9b: Qwen3.5
+#                       dense (hybrid Gated DeltaNet / gated attention, MTP; recipe = NVIDIA's GB200
+#                       Qwen3.5-9B text recipe built from the size's own HF config, train/pretrain.py).
+#                       Dense defaults: EP=1, PP=1 (pure data parallelism), no MoE knobs; run names
+#                       start with q35-<size> instead of q35a3b. GLOBAL_DP and every OPTIMIZER work.
+#                       W&B project: qwen35-<MODEL>-cscs (WANDB_PROJECT_FIXED=1: the one in config.sh)
 #   EP [4] TP [1] PP [2] CP [1] ETP [1]   parallel sizes; EP=4 keeps the expert all-to-all
 #                                         inside a node (NVLink), only DP/PP traffic crosses Slingshot;
 #                                         PP=2 halves the static memory (PP=1 does not fit, WORKLOG.md).
@@ -93,6 +99,8 @@
 #   DION_RANK_FRACTION [0.25]  Dion rank r = fraction x min(rows, cols) of each matrix
 #   DION_COMM_DTYPE [bf16]     bf16 | fp32: dtype of the factors summed across datacenters
 #   DION_SYNC_CHECK [0]        every N steps compare the Dion matrices across datacenters (log)
+#   FINAL_EVAL [1; 0 with MAX_STEPS]  1 = Bridge's validation + test passes after the run's last step
+#                       (a MAX_STEPS run already evaluates at its last step with EVAL_INTERVAL=MAX_STEPS)
 #   MAX_STEPS           stop the run at this step while the batch-size schedule and the LR schedule stay
 #                       those of the full token budget (a short run identical to the start of the long
 #                       one); train runs get "-max<N>" in their name, so they never share the full run's
@@ -112,8 +120,22 @@ source "$WORKDIR/env/versions.env"
 USAGE="Usage: ./launch.sh <smoke|throughput|train> [nodes] [steps]"
 MODE=${1:?$USAGE}
 
+MODEL=${MODEL:-35b-a3b}
+case $MODEL in
+    35b-a3b) MOE=1; MODEL_LAYERS=40; MTAG=q35a3b; DEFAULT_RECIPE=qwen35_text_35b_a3b_pretrain_8gpu_gb200_bf16_config ;;
+    0.8b|2b) MOE=0; MODEL_LAYERS=24 ;;
+    4b|9b)   MOE=0; MODEL_LAYERS=32 ;;
+    *) echo "MODEL must be 35b-a3b, 0.8b, 2b, 4b or 9b"; exit 1 ;;
+esac
+if [ "$MOE" = 0 ]; then
+    MTAG=q35-$MODEL; DEFAULT_RECIPE="qwen35_text_dense:${MODEL^^}"
+fi
+# One W&B project per model: qwen35-<MODEL>-cscs (qwen35-35b-a3b-cscs, qwen35-9b-cscs, ...), so runs of
+# different models never share charts. WANDB_PROJECT_FIXED=1 keeps WANDB_PROJECT from config.sh.
+[ "${WANDB_PROJECT_FIXED:-0}" = 1 ] || WANDB_PROJECT="qwen35-${MODEL}-cscs"
+
 model_layers() {  # transformer layers of this run (the smoke model has 4)
-    if [ "$MODE" = smoke ]; then echo 4; else echo 40; fi
+    if [ "$MODE" = smoke ]; then echo 4; else echo "$MODEL_LAYERS"; fi
 }
 
 hms_to_mins() {
@@ -122,7 +144,8 @@ hms_to_mins() {
     echo $((10#$h * 60 + 10#$m + (10#${s:-0} + 59) / 60))
 }
 
-EP=${EP:-4}; TP=${TP:-1}; PP=${PP:-2}; CP=${CP:-1}; ETP=${ETP:-1}
+if [ "$MOE" = 1 ]; then EP=${EP:-4}; PP=${PP:-2}; else EP=${EP:-1}; PP=${PP:-1}; fi
+TP=${TP:-1}; CP=${CP:-1}; ETP=${ETP:-1}
 MBS=${MBS:-1}; SEQ_LEN=${SEQ_LEN:-4096}
 GRAD_FP32=${GRAD_FP32:-0}; CUDA_GRAPHS=${CUDA_GRAPHS:-1}; RECOMPUTE=${RECOMPUTE:-none}
 DISPATCHER=${DISPATCHER:-auto}
@@ -148,11 +171,18 @@ VPP=${VPP:-}; EP_OVERLAP=${EP_OVERLAP:-0}
 # layer. On real data 21/19 is as fast as 23/17 (the mock-data optimum, which assumes balanced
 # expert routing) and leaves the fullest GPU 11 GB of HBM instead of 6.6 GB (WORKLOG.md).
 # PP_LAYOUT="" keeps Megatron's even split.
-if [ -z "${PP_LAYOUT+set}" ] && [ "$PP" = 2 ] && [ -z "$VPP" ]; then
+if [ -z "${PP_LAYOUT+set}" ] && [ "$PP" = 2 ] && [ -z "$VPP" ] && [ "$MOE" = 1 ]; then
     if [ "$MODE" = smoke ]; then PP_LAYOUT="Et*3|tmL"; else PP_LAYOUT="Et*21|t*19mL"; fi
 fi
 PP_LAYOUT=${PP_LAYOUT:-}
-if [ "$DISPATCHER" = auto ]; then (( EP * ETP <= 4 )) && DISPATCHER=hybridep || DISPATCHER=alltoall; fi
+if [ "$MOE" = 0 ]; then
+    { [ "$DISPATCHER" = auto ] || [ "$DISPATCHER" = none ]; } || { echo "DISPATCHER: MODEL=$MODEL has no experts"; exit 1; }
+    (( EP == 1 && ETP == 1 )) || { echo "EP/ETP: MODEL=$MODEL has no experts"; exit 1; }
+    [ "$EP_OVERLAP" = 0 ] || { echo "EP_OVERLAP: MODEL=$MODEL has no experts"; exit 1; }
+    DISPATCHER=none
+elif [ "$DISPATCHER" = auto ]; then
+    if (( EP * ETP <= 4 )); then DISPATCHER=hybridep; else DISPATCHER=alltoall; fi
+fi
 NSYS_STEPS=${NSYS_STEPS:-10:12}; NSYS_RANKS=${NSYS_RANKS:-0}; NSYS_TRACE=${NSYS_TRACE:-cuda,nvtx}
 EVAL_ITERS=${EVAL_ITERS:-16}   # 16 x GBS 2560 = 168M tokens per evaluation (~1% of the run time at 8 nodes)
 SUMMARIZE=1
@@ -168,8 +198,9 @@ case $MODE in
         export NCCL_DEBUG=${NCCL_DEBUG:-INFO} NCCL_DEBUG_SUBSYS=${NCCL_DEBUG_SUBSYS:-INIT,ENV}
         # One 4-layer block of the real pattern (3x Gated DeltaNet + 1 gated attention): the
         # bridge stores the 40-entry per-layer pattern, so replace it by its period.
-        OVERRIDES+=(model.num_layers=4 model.linear_attention_freq=4 model.num_moe_experts=32
+        OVERRIDES+=(model.num_layers=4 model.linear_attention_freq=4
                     validation.eval_interval=10 validation.eval_iters=2)
+        [ "$MOE" = 1 ] && OVERRIDES+=(model.num_moe_experts=32)
         WARMUP=${WARMUP:-5}; SAVE_INTERVAL=${SAVE_INTERVAL:-15}
         CKPT=save; RESUBMIT=false; MAX_RESUBMITS=0
         ;;
@@ -326,7 +357,7 @@ OVERRIDES+=(mixed_precision.grad_reduce_in_fp32=$GF ddp.grad_reduce_in_fp32=$GF)
 [ -n "$PP_LAYOUT" ] && OVERRIDES+=("model.pipeline_model_parallel_layout='$PP_LAYOUT'")
 [ "$EP_OVERLAP" = 1 ] && OVERRIDES+=(comm_overlap.overlap_moe_expert_parallel_comm=true)
 case $DISPATCHER in
-    alltoall) ;;
+    alltoall|none) ;;
     hybridep)
         # HybridEP's NVLink path only: across nodes it needs InfiniBand GPU-initiated RDMA.
         # Expert groups are consecutive ranks (ETP innermost), so EP*ETP <= 4 stays in a node.
@@ -336,7 +367,9 @@ case $DISPATCHER in
 esac
 case $RECOMPUTE in
     none) ;;
-    selective) OVERRIDES+=(model.recompute_granularity=selective "model.recompute_modules=[moe_act,layernorm]") ;;
+    selective)
+        if [ "$MOE" = 1 ]; then MODS="[moe_act,layernorm]"; else MODS="[mlp,layernorm]"; fi
+        OVERRIDES+=(model.recompute_granularity=selective "model.recompute_modules=$MODS") ;;
     *) echo "RECOMPUTE must be none or selective"; exit 1 ;;
 esac
 [ -n "${LR:-}" ] && OVERRIDES+=(optimizer.lr=$LR)
@@ -354,12 +387,13 @@ esac
 [ -n "${EXTRA:-}" ] && OVERRIDES+=($EXTRA)
 
 ################ Names and paths ################
-TAG="q35a3b-${NODES}n-ep${EP}"
+TAG="${MTAG}-${NODES}n"
+[ "$MOE" = 1 ] && TAG+="-ep${EP}"
 (( TP > 1 )) && TAG+="-tp$TP"; (( PP > 1 )) && TAG+="-pp$PP"; [ -n "$VPP" ] && TAG+="-vpp$VPP"; (( CP > 1 )) && TAG+="-cp$CP"
 [ -n "$PP_LAYOUT" ] && TAG+="-lay$(echo "$PP_LAYOUT" | tr -cd '0-9|' | tr '|' 'x')"
 TAG+="-mbs${MBS}-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}"
 [ "$GRAD_FP32" = 1 ] && TAG+="-gf32"; [ "$CUDA_GRAPHS" = 0 ] && TAG+="-nocg"; [ "$RECOMPUTE" != none ] && TAG+="-rc"
-[ "$DISPATCHER" != alltoall ] && TAG+="-$DISPATCHER"; [ "$EP_OVERLAP" = 1 ] && TAG+="-epov"
+[ "$DISPATCHER" = hybridep ] && TAG+="-$DISPATCHER"; [ "$EP_OVERLAP" = 1 ] && TAG+="-epov"
 GDP_TAG=""; (( GLOBAL_DP > 1 )) && GDP_TAG="-gdp$GLOBAL_DP"
 OPT_TAG=""; [ "$OPTIMIZER" != adam ] && OPT_TAG="-$OPTIMIZER"
 if [ "$OPTIMIZER" = dion-zero1 ]; then
@@ -378,7 +412,7 @@ if [ "$MODE" = train ]; then
     # optimizer state is saved DP-reshardable (Megatron default), so TP/PP/CP/EP/ETP/VPP must
     # stay fixed for the life of a run (checked below) unless it was saved with
     # checkpoint.dist_ckpt_optim_fully_reshardable=true.
-    EXP_NAME="train-q35a3b-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}${RUN_TAGS}${EXP_SUFFIX:+-$EXP_SUFFIX}"
+    EXP_NAME="train-${MTAG}-gbs${GBS_FIRST:+${GBS_FIRST}to}${GBS}-sl${SEQ_LEN}${RUN_TAGS}${EXP_SUFFIX:+-$EXP_SUFFIX}"
 else
     EXP_NAME="${MODE}-${TAG}${RUN_TAGS}${EXP_SUFFIX:+-$EXP_SUFFIX}"
 fi
@@ -428,7 +462,7 @@ if [ ! -d "$SRC" ]; then
     mv -T "$SRC_TMP" "$SRC" 2>/dev/null || rm -rf "$SRC_TMP"   # another launch made it first
 fi
 
-TRAIN_ARGS=(--recipe "${RECIPE:-qwen35_text_35b_a3b_pretrain_8gpu_gb200_bf16_config}"
+TRAIN_ARGS=(--recipe "${RECIPE:-$DEFAULT_RECIPE}"
             --profile "$SRC/conf/qwen35_35b_a3b_gh200.yaml")
 [ -n "${BLEND:-}" ] && TRAIN_ARGS+=(--blend "$BLEND")
 [ "${DRYRUN:-0}" = 1 ] && TRAIN_ARGS+=(--dry-run)
@@ -488,6 +522,7 @@ PATCHES=$(printf %q "$PATCHES")
 CRASH_RETRIES=${CRASH_RETRIES:-2}
 TRAIN_ITERS=$STEPS
 BATCH_SCHEDULE=$BATCH_SCHEDULE
+FINAL_EVAL=${FINAL_EVAL:-$([ -n "${MAX_STEPS:-}" ] && echo 0 || echo 1)}
 WANDB_PROJECT=$(printf %q "${WANDB_PROJECT:-}")
 WANDB_ENTITY=$(printf %q "${WANDB_ENTITY:-}")
 WANDB_MODE=$(printf %q "${WANDB_MODE:-}")
@@ -505,6 +540,7 @@ echo "Generated: $SCRIPT"
 echo "  run dir: $RUN_DIR"
 echo "  scripts: $SRC"
 echo "  layout : nodes=$NODES world=$WORLD TP=$TP PP=$PP CP=$CP EP=$EP DP=$DP MBS=$MBS GBS=$GBS seq=$SEQ_LEN"
+echo "  W&B project: ${WANDB_PROJECT:-none}"
 echo "  logging: NETLOG=$NETLOG NSYS=$NSYS W&B=$([ -n "${WANDB_API_KEY:-}" ] && echo "on${WANDB_MODE:+ ($WANDB_MODE)}" || { [ "${WANDB_MODE:-}" = offline ] && echo "offline (no key)" || echo off; })"
 if [ "${SUBMIT:-1}" = 1 ]; then
     FLAKY=$([ "$EXCLUDE_FLAKY" = 1 ] && "$WORKDIR/tools/flaky_nodes.sh" || true)
