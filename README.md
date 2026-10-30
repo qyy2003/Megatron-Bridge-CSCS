@@ -1,5 +1,7 @@
 # Megatron-Bridge-CSCS
 
+> **Start with [HANDOVER.md](HANDOVER.md)**: current state, where everything lives, how to restart on a new account, and the experiment in progress.
+
 Pretrain **Qwen3.5/3.6-35B-A3B from scratch** on CSCS Alps (Clariden, 4× GH200 per node,
 Slingshot-11) with **Megatron-Bridge**, on the **Nemotron 3.5 Lightning open-data blend**,
 with W&B loss logging and a record of the network traffic.
@@ -150,6 +152,9 @@ OPTIMIZER=muon-zero1 GLOBAL_DP=2 MAX_STEPS=500 WALLTIME=04:00:00 MAX_RESUBMITS=0
   N steps that the datacenters hold identical weights). Measured at 8 nodes: 3.0×/4.8× fewer
   cross-datacenter bytes per GPU (stage 0/1) at r=1/4 and faster steps than Muon (WORKLOG.md);
   unit tests: `SNAP=<snapshot> sbatch tests/run_dion_tests.sbatch`.
+- `MUON_SPECTRAL=polar|power:<p>|top:<f>` (with `OPTIMIZER=muon|muon-zero1`, patch set `muon-spectral`): Muon's update
+  from an exact SVD with reweighted singular values, rescaled to Muon's update RMS (all equal, s**p, or only the top
+  fraction), to test which singular directions matter (WORKLOG §8). `DION_SCALE` multiplies Dion's update.
 - `PATCHES=set1,set2` applies optional patch sets `patches/optional/<set>/` to this job only (its own
   code snapshot, so jobs with different sets can run at the same time); see
   `patches/optional/README.md`.

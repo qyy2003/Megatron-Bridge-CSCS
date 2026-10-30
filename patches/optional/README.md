@@ -26,3 +26,4 @@ Sets in this repository:
 |---|---|---|
 | `muon-zero1` | ZeRO-1 for Megatron-Core's layer-wise Muon (shard-aligned buffers) and optimizer instances (GLOBAL_DP) | `OPTIMIZER=muon-zero1` |
 | `dion` | Dion (own implementation) with compressed cross-instance sync; needs `muon-zero1` first | `OPTIMIZER=dion-zero1` |
+| `muon-spectral` | Muon with an exact, reweighted spectrum (polar / power / top-fraction) for the spectral experiments | `MUON_SPECTRAL=...` |

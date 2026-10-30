@@ -1,0 +1,147 @@
+# Patch: Muon with an exact, reweighted spectrum (optional set "muon-spectral", after muon-zero1;
+# launch.sh MUON_SPECTRAL=polar|power:<p>|top:<f>)
+#
+# Problem:   to test whether Muon's equal treatment of all singular directions matters (9B Dion vs
+#            Muon, WORKLOG §7), the update must be computable with other spectral weightings.
+# What:      emerging_optimizers.spectral_update(grad, mode, param): exact SVD via the smaller Gram
+#            matrix's eigendecomposition (fp64), update U diag(w(s)) V^T rescaled to Frobenius norm
+#            sqrt(min(m, n)) (Muon's update RMS), w = 1 (polar), s**p (power), 1 for the top
+#            ceil(f min(m, n)) directions else 0 (top, no error feedback). TensorParallelMuon gets
+#            spectral_mode / spectral_param (OptimizerConfig muon_spectral_mode / muon_spectral_param,
+#            default "ns" = unchanged Newton-Schulz); Muon's momentum, Nesterov, QKV split and shape
+#            scaling stay as they are. TP = 1 only. adaptive_muon does not take the new kwargs.
+# Porting:   TensorParallelMuon.__init__ and _adaptive_muon_config_to_kwargs in
+#            megatron/core/optimizer/emerging_optimizers.py.
+#
+diff --git a/megatron/core/optimizer/emerging_optimizers.py b/megatron/core/optimizer/emerging_optimizers.py
+index 53ac956..c864cb5 100644
+--- a/megatron/core/optimizer/emerging_optimizers.py
++++ b/megatron/core/optimizer/emerging_optimizers.py
+@@ -9,6 +9,7 @@ To add a new emerging optimizer:
+ """
+ 
+ import inspect
++import math
+ import logging
+ from dataclasses import dataclass, field
+ from typing import Any, Callable, Dict, Literal, Optional, get_args
+@@ -157,6 +158,55 @@ _EMERGING_OPTIMIZERS: Dict[str, EmergingOptimizerEntry] = {}
+ # ===========================================================================
+ 
+ 
++@torch.no_grad()
++def spectral_update(grad: torch.Tensor, mode: str, param: float, rel_eps: float = 1e-4) -> torch.Tensor:
++    """Muon update with an exact, reweighted spectrum (optional patch set muon-spectral).
++
++    With G = U diag(s) V^T (from the eigendecomposition of the smaller Gram matrix in fp64: the
++    Gram matrix squares the condition number, which fp32 cannot resolve for gradients with a few
++    strong directions over a noisy bulk), the
++    update is U diag(w(s)) V^T rescaled to the Frobenius norm sqrt(min(m, n)) of a full-rank polar
++    factor, i.e. the RMS of Muon's ideal update, so that modes differ only in how the step is spread
++    over the singular directions:
++
++    - ``polar``: w = 1 (exact Muon; Newton-Schulz approximates it),
++    - ``power``: w = s**param (param = 0: polar; param = 1: the normalized gradient),
++    - ``top``:   w = 1 for the top ceil(param * min(m, n)) directions, 0 for the rest (no error
++      feedback: the tail is dropped).
++
++    Directions with s < rel_eps * max(s) count as numerically zero (w = 0).
++    """
++    g = grad.double()
++    transpose = g.size(0) < g.size(1)
++    if transpose:
++        g = g.t()
++    k = g.size(1)  # min(m, n); g is m x k with m >= k
++    evals, vecs = torch.linalg.eigh(g.t() @ g)  # ascending, k x k
++    s = evals.clamp(min=0).sqrt()
++    smax = s.max()
++    valid = s > rel_eps * smax
++    if mode == "polar":
++        w = torch.ones_like(s)
++    elif mode == "power":
++        w = s.pow(param)
++    elif mode == "top":
++        r = max(1, math.ceil(param * k))
++        w = torch.zeros_like(s)
++        w[-r:] = 1.0
++    else:
++        raise ValueError(f"unknown spectral mode {mode!r}")
++    w = torch.where(valid, w, torch.zeros_like(w))
++    # U diag(w) V^T = G V diag(w / s) V^T
++    coef = torch.where(valid, w / s.clamp(min=torch.finfo(s.dtype).tiny), torch.zeros_like(s))
++    update = g @ ((vecs * coef) @ vecs.t())
++    norm = update.norm()
++    if norm > 0:
++        update = update * (math.sqrt(k) / norm)
++    if transpose:
++        update = update.t()
++    return update.to(grad.dtype)
++
++
+ class TensorParallelMuon(OrthogonalizedOptimizer):
+     """Tensor Parallel Muon optimizer."""
+ 
+@@ -178,9 +228,13 @@ class TensorParallelMuon(OrthogonalizedOptimizer):
+         extra_scale_factor: float = 1.0,
+         pg_collection: Optional[ProcessGroupCollection] = None,
+         tp_mode: Literal["blockwise", "duplicated", "distributed"] = "duplicated",
++        spectral_mode: str = "ns",
++        spectral_param: float = 0.0,
+     ) -> None:
+         if num_ns_steps < 1:
+             raise ValueError(f"num_ns_steps must be at least 1, got {num_ns_steps}")
++        if spectral_mode not in ("ns", "polar", "power", "top"):
++            raise ValueError(f"spectral_mode must be ns, polar, power or top, got {spectral_mode!r}")
+ 
+         def scaled_orthogonalize_fn(
+             grad: torch.Tensor,
+@@ -208,6 +262,20 @@ class TensorParallelMuon(OrthogonalizedOptimizer):
+             scale_factor = get_muon_scale_factor(size[0], size[1], mode=scale_mode)
+             return orth_grad * scale_factor * extra_scale_factor
+ 
++        def spectral_update_fn(
++            grad: torch.Tensor,
++            tp_group: torch.distributed.ProcessGroup,
++            partition_dim: int | None = None,
++        ) -> torch.Tensor:
++            if partition_dim is not None and get_pg_size(tp_group) > 1:
++                raise ValueError("Muon spectral modes support tensor parallel size 1 only")
++            update = spectral_update(grad, spectral_mode, spectral_param)
++            scale_factor = get_muon_scale_factor(grad.size(-2), grad.size(-1), mode=scale_mode)
++            return update * scale_factor * extra_scale_factor
++
++        if spectral_mode != "ns":
++            scaled_orthogonalize_fn = spectral_update_fn
++
+         self.pg_collection = pg_collection
+         self.tp_mode = tp_mode
+         self.split_qkv = split_qkv
+@@ -444,6 +512,8 @@ def _muon_config_to_kwargs(config, model_chunks, pg_collection) -> Dict[str, Any
+ def _adaptive_muon_config_to_kwargs(config, model_chunks, pg_collection) -> Dict[str, Any]:
+     """Convert OptimizerConfig to TensorParallelAdaptiveMuon constructor kwargs."""
+     kwargs = _muon_config_to_kwargs(config, model_chunks, pg_collection)
++    kwargs.pop("spectral_mode", None)  # muon-spectral: plain Muon only
++    kwargs.pop("spectral_param", None)
+     kwargs.update(_kwargs_from_config(TensorParallelAdaptiveMuon, "adaptive_muon", config))
+     return kwargs
+ 
+diff --git a/megatron/core/optimizer/optimizer_config.py b/megatron/core/optimizer/optimizer_config.py
+index 24f9a03..50423a8 100644
+--- a/megatron/core/optimizer/optimizer_config.py
++++ b/megatron/core/optimizer/optimizer_config.py
+@@ -285,6 +285,15 @@ class OptimizerConfig:
+     muon_extra_scale_factor: float = 1.0
+     """Additional scale factor for the muon update."""
+ 
++    muon_spectral_mode: str = "ns"
++    """How Muon turns the momentum into an update (optional patch set muon-spectral): "ns" =
++    Newton-Schulz (default Muon); with an exact spectrum rescaled to Muon's update RMS: "polar"
++    (all singular values 1), "power" (singular values ** muon_spectral_param), "top" (the top
++    muon_spectral_param fraction of the singular directions only, the rest dropped)."""
++
++    muon_spectral_param: float = 0.0
++    """Exponent ("power") or kept fraction ("top") of muon_spectral_mode."""
++
+     muon_scalar_optimizer: str = 'adam'
+     """Optimizer for nonlinear parameters (embeddings, biases, norms) when using muon.
+     One of 'adam' or 'lion'. Defaults to 'adam'."""

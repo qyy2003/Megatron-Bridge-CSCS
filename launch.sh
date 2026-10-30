@@ -99,6 +99,12 @@
 #   DION_RANK_FRACTION [0.25]  Dion rank r = fraction x min(rows, cols) of each matrix
 #   DION_COMM_DTYPE [bf16]     bf16 | fp32: dtype of the factors summed across datacenters
 #   DION_SYNC_CHECK [0]        every N steps compare the Dion matrices across datacenters (log)
+#   DION_SCALE [1]             multiply Dion's update (e.g. 2 = Muon's update RMS at r=1/4); run name "-x<s>"
+#   MUON_SPECTRAL [ns]  muon / muon-zero1 only (patch set muon-spectral): how the momentum becomes the
+#                       update. ns = Newton-Schulz (Muon); with an exact SVD, rescaled to Muon's update
+#                       RMS: polar (all singular values 1), power:<p> (singular values ** p; 1 = normalized
+#                       gradient), top:<f> (top f of the singular directions only, the rest dropped).
+#                       Run name "-spec-<mode><param>"
 #   FINAL_EVAL [1; 0 with MAX_STEPS]  1 = Bridge's validation + test passes after the run's last step
 #                       (a MAX_STEPS run already evaluates at its last step with EVAL_INTERVAL=MAX_STEPS)
 #   MAX_STEPS           stop the run at this step while the batch-size schedule and the LR schedule stay
@@ -156,6 +162,18 @@ OPTIMIZER=${OPTIMIZER:-adam}
 case $OPTIMIZER in adam|muon|muon-zero1|dion-zero1) ;; *) echo "OPTIMIZER must be adam, muon, muon-zero1 or dion-zero1"; exit 1 ;; esac
 IMPLIED_SETS=""   # optional patch sets an OPTIMIZER needs (in this order, not repeated in the run name)
 case $OPTIMIZER in muon-zero1) IMPLIED_SETS="muon-zero1" ;; dion-zero1) IMPLIED_SETS="muon-zero1 dion" ;; esac
+MUON_SPECTRAL=${MUON_SPECTRAL:-ns}
+case $MUON_SPECTRAL in
+    ns) SPEC_MODE=ns; SPEC_PARAM=0 ;;
+    polar) SPEC_MODE=polar; SPEC_PARAM=0 ;;
+    power:*|top:*) SPEC_MODE=${MUON_SPECTRAL%%:*}; SPEC_PARAM=${MUON_SPECTRAL#*:} ;;
+    *) echo "MUON_SPECTRAL must be ns, polar, power:<p> or top:<f>"; exit 1 ;;
+esac
+if [ "$SPEC_MODE" != ns ]; then
+    case $OPTIMIZER in muon|muon-zero1) ;; *) echo "MUON_SPECTRAL needs OPTIMIZER=muon or muon-zero1"; exit 1 ;; esac
+    IMPLIED_SETS="$IMPLIED_SETS muon-spectral"
+fi
+DION_SCALE=${DION_SCALE:-1}
 for set in $IMPLIED_SETS; do
     [[ ",$PATCHES," == *,$set,* ]] || PATCHES=${PATCHES:+$PATCHES,}$set
 done
@@ -278,8 +296,10 @@ if [ "$OPTIMIZER" != adam ]; then
                 ddp.overlap_param_gather=false optimizer.overlap_param_gather=false
                 comm_overlap.overlap_param_gather=false)
     [ "$OPTIMIZER" = muon ] || OVERRIDES+=(ddp.use_layer_wise_param_layout=true)
+    [ "$SPEC_MODE" = ns ] || OVERRIDES+=(optimizer.muon_spectral_mode=$SPEC_MODE optimizer.muon_spectral_param=$SPEC_PARAM)
     if [ "$OPTIMIZER" = dion-zero1 ]; then
         (( TP == 1 && ETP == 1 )) || { echo "OPTIMIZER=dion-zero1 needs TP=1 and ETP=1 (whole matrices per rank)"; exit 1; }
+        OVERRIDES+=(optimizer.muon_extra_scale_factor=$DION_SCALE)
         OVERRIDES+=(optimizer.dion_rank_fraction=$DION_RANK_FRACTION optimizer.dion_mu=0.95
                     optimizer.dion_comm_dtype=$DION_COMM_DTYPE optimizer.dion_sync_check_interval=$DION_SYNC_CHECK)
         (( GLOBAL_DP > 1 )) && OVERRIDES+=(ddp.layer_wise_skip_inter_instance_grad_sync=true)
@@ -399,6 +419,11 @@ OPT_TAG=""; [ "$OPTIMIZER" != adam ] && OPT_TAG="-$OPTIMIZER"
 if [ "$OPTIMIZER" = dion-zero1 ]; then
     OPT_TAG+="-r$DION_RANK_FRACTION"
     if [ "$DION_COMM_DTYPE" = fp32 ]; then OPT_TAG+="-fp32comm"; fi
+    if [ "$DION_SCALE" != 1 ]; then OPT_TAG+="-x$DION_SCALE"; fi
+fi
+if [ "$SPEC_MODE" != ns ]; then
+    OPT_TAG+="-spec-$SPEC_MODE"
+    if [ "$SPEC_MODE" != polar ]; then OPT_TAG+="$SPEC_PARAM"; fi
 fi
 PTAG=""   # optional patch sets in the run name, except those the OPTIMIZER implies
 for set in ${PATCHES//,/ }; do
