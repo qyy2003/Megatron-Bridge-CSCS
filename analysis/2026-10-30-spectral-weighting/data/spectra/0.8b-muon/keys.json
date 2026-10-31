@@ -1,0 +1,2943 @@
+{
+"decoder.layers.0.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.0.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.1.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.1.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.2.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.2.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.2.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.3.self_attention.k_layernorm.weight": [
+256
+],
+"decoder.layers.3.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.4.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.4.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.5.self_attention.A_log": [
+16
+],
+"decoder.layers.5.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.5.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.5.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.6.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.6.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.8.self_attention.A_log": [
+16
+],
+"decoder.layers.8.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.8.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.8.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.8.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.8.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.9.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.10.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.10.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.11.self_attention.k_layernorm.weight": [
+256
+],
+"decoder.layers.12.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.12.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.12.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.13.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.13.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.13.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.13.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.14.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.14.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.15.self_attention.k_layernorm.weight": [
+256
+],
+"decoder.layers.16.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.16.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.16.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.17.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.17.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.18.self_attention.A_log": [
+16
+],
+"decoder.layers.18.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.18.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.18.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.18.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.18.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.19.self_attention.k_layernorm.weight": [
+256
+],
+"decoder.layers.20.self_attention.A_log": [
+16
+],
+"decoder.layers.20.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.21.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.21.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.21.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.22.self_attention.A_log": [
+16
+],
+"decoder.layers.22.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.22.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.22.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.22.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.23.self_attention.linear_qkv.layer_norm_weight": [
+1024
+],
+"decoder.final_layernorm.weight": [
+1024
+],
+"mtp.layers.0.transformer_layer.self_attention.k_layernorm.weight": [
+256
+],
+"mtp.layers.0.transformer_layer.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"mtp.layers.0.final_layernorm.weight": [
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.0.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.0.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.0.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.1.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.2.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.2.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.2.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.3.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.4.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.4.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.4.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.6.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.6.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.6.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.7.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.8.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.8.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.8.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.10.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.10.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.10.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.12.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.12.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.12.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.13.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.14.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.14.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.14.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.16.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.16.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.16.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.18.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.18.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.18.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.18.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.20.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.20.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.20.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.20.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.22.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.22.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.22.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.0.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.0.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.2.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.2.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.2.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.3.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.4.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.4.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.4.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.6.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.6.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.6.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.7.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.8.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.8.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.8.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.10.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.12.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.14.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.16.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.16.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.16.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.18.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.18.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.18.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.18.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.20.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.20.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.20.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.20.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.22.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.22.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.22.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_1.optimizer.distributed.dp_group_idx_0.gbuf_idx_0.dtype_(torch.bfloat16, torch.bfloat16).bucket_idx_0.param": [
+254654464
+],
+"chained_1.optimizer.distributed.dp_group_idx_0.gbuf_idx_0.dtype_(torch.bfloat16, torch.bfloat16).bucket_idx_0.exp_avg_sq": [
+254654464
+],
+"chained_1.optimizer.distributed.dp_group_idx_0.gbuf_idx_0.dtype_(torch.bfloat16, torch.bfloat16).bucket_idx_0.exp_avg": [
+254654464
+],
+"decoder.layers.0.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.0.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.0.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.0.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.1.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.1.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.1.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.1.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.2.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.2.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.2.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.2.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.2.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.2.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.3.self_attention.linear_qkv.layer_norm_weight": [
+1024
+],
+"decoder.layers.3.self_attention.q_layernorm.weight": [
+256
+],
+"decoder.layers.4.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.4.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.4.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.4.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.4.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.5.self_attention.dt_bias": [
+16
+],
+"decoder.layers.5.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.5.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.5.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.5.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.5.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.5.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.6.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.6.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.6.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.7.self_attention.linear_qkv.layer_norm_weight": [
+1024
+],
+"decoder.layers.7.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"decoder.layers.7.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.8.self_attention.dt_bias": [
+16
+],
+"decoder.layers.8.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.8.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.9.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.9.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.9.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.9.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.9.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.10.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.10.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.10.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.10.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.10.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.11.self_attention.linear_qkv.layer_norm_weight": [
+1024
+],
+"decoder.layers.11.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"decoder.layers.11.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.12.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.12.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.13.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.13.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.13.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.13.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.13.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.13.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.14.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.14.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.14.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.14.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.14.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.15.self_attention.linear_qkv.layer_norm_weight": [
+1024
+],
+"decoder.layers.15.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.16.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.16.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.16.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.16.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.17.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.17.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.17.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.18.self_attention.dt_bias": [
+16
+],
+"decoder.layers.18.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.18.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.18.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.18.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.19.self_attention.linear_qkv.layer_norm_weight": [
+1024
+],
+"decoder.layers.19.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"decoder.layers.19.self_attention.q_layernorm.weight": [
+256
+],
+"decoder.layers.20.self_attention.dt_bias": [
+16
+],
+"decoder.layers.20.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.20.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.20.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.20.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.20.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.21.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.21.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.21.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.22.self_attention.dt_bias": [
+16
+],
+"decoder.layers.22.self_attention.in_proj.layer_norm_weight": [
+1024
+],
+"decoder.layers.22.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.22.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.22.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"decoder.layers.22.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"mtp.layers.0.transformer_layer.self_attention.q_layernorm.weight": [
+256
+],
+"mtp.layers.0.transformer_layer.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.1.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.1.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.3.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.5.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.5.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.6.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.7.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.9.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.9.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.11.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.13.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.13.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.14.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.15.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.17.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.17.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.17.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.20.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.21.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.21.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.23.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.mtp.layers.0.transformer_layer.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.1.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.1.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.5.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.5.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.7.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.9.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.9.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.13.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.13.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.17.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.17.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.17.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.21.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.21.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.mtp.layers.0.transformer_layer.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.0.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.1.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.1.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.4.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.5.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.6.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.6.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.8.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.9.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.10.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.10.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.12.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.12.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.14.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.14.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.16.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.17.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.17.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.19.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.19.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.20.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.20.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.21.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.23.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.23.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"decoder.layers.23.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"mtp.layers.0.eh_proj.weight": [
+1024,
+2048
+],
+"mtp.layers.0.transformer_layer.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.1.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.2.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.4.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.5.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.5.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.6.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.9.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.10.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.12.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.13.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.13.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.14.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.17.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.19.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.19.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.22.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.mtp.layers.0.eh_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.mtp.layers.0.transformer_layer.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.2.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.5.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.5.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.6.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.8.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.9.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.16.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.19.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.22.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.mtp.layers.0.transformer_layer.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.0.self_attention.A_log": [
+16
+],
+"decoder.layers.0.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.0.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.0.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.1.self_attention.A_log": [
+16
+],
+"decoder.layers.1.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.1.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.1.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.2.self_attention.A_log": [
+16
+],
+"decoder.layers.2.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.2.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.2.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.4.self_attention.A_log": [
+16
+],
+"decoder.layers.4.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.4.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.4.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.5.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.5.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.6.self_attention.A_log": [
+16
+],
+"decoder.layers.6.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.6.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.7.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.7.self_attention.k_layernorm.weight": [
+256
+],
+"decoder.layers.7.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.8.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.8.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.8.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.9.self_attention.A_log": [
+16
+],
+"decoder.layers.9.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.9.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"decoder.layers.9.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.9.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.10.self_attention.A_log": [
+16
+],
+"decoder.layers.10.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.11.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.11.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.12.self_attention.A_log": [
+16
+],
+"decoder.layers.12.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.12.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.13.self_attention.A_log": [
+16
+],
+"decoder.layers.13.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.13.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.14.self_attention.A_log": [
+16
+],
+"decoder.layers.14.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.14.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.14.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.15.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.16.self_attention.A_log": [
+16
+],
+"decoder.layers.16.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.16.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.16.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.17.self_attention.A_log": [
+16
+],
+"decoder.layers.17.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.17.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.18.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.18.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.18.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.20.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.20.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.21.self_attention.A_log": [
+16
+],
+"decoder.layers.21.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.21.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.21.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.22.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.22.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.23.self_attention.k_layernorm.weight": [
+256
+],
+"decoder.layers.23.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.23.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"mtp.layers.0.enorm.weight": [
+1024
+],
+"mtp.layers.0.transformer_layer.self_attention.linear_qkv.layer_norm_weight": [
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.0.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.0.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.2.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.3.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.4.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.6.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.7.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.8.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.10.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.12.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.12.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.16.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.16.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.18.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.20.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.21.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.3.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.4.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.7.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.8.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.10.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.12.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.12.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.14.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.16.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.16.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.18.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.20.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.21.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.23.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.0.self_attention.dt_bias": [
+16
+],
+"decoder.layers.0.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.1.self_attention.dt_bias": [
+16
+],
+"decoder.layers.1.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.1.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.1.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.2.self_attention.dt_bias": [
+16
+],
+"decoder.layers.2.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.2.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.3.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.3.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.4.self_attention.dt_bias": [
+16
+],
+"decoder.layers.4.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.4.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.5.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.5.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.6.self_attention.dt_bias": [
+16
+],
+"decoder.layers.6.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.6.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.6.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.6.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.7.self_attention.q_layernorm.weight": [
+256
+],
+"decoder.layers.7.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.8.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.9.self_attention.dt_bias": [
+16
+],
+"decoder.layers.9.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.9.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.9.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.10.self_attention.dt_bias": [
+16
+],
+"decoder.layers.10.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.10.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.10.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.11.self_attention.q_layernorm.weight": [
+256
+],
+"decoder.layers.11.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.12.self_attention.dt_bias": [
+16
+],
+"decoder.layers.12.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.12.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.12.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.13.self_attention.dt_bias": [
+16
+],
+"decoder.layers.13.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.13.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.14.self_attention.dt_bias": [
+16
+],
+"decoder.layers.14.self_attention.conv1d.weight.key": [
+2048,
+1,
+4
+],
+"decoder.layers.14.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.15.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.15.self_attention.q_layernorm.weight": [
+256
+],
+"decoder.layers.15.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.16.self_attention.dt_bias": [
+16
+],
+"decoder.layers.16.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.17.self_attention.dt_bias": [
+16
+],
+"decoder.layers.17.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.17.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.17.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.17.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.18.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.18.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.19.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.20.self_attention.conv1d.weight.query": [
+2048,
+1,
+4
+],
+"decoder.layers.20.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.20.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.21.self_attention.dt_bias": [
+16
+],
+"decoder.layers.21.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.21.self_attention.conv1d.weight.value": [
+2048,
+1,
+4
+],
+"decoder.layers.21.self_attention.out_norm.weight": [
+128
+],
+"decoder.layers.22.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.22.mlp.linear_fc1.layer_norm_weight": [
+1024
+],
+"decoder.layers.23.self_attention.q_layernorm.weight": [
+256
+],
+"mtp.layers.0.hnorm.weight": [
+1024
+],
+"mtp.layers.0.transformer_layer.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.0.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.0.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.0.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.2.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.2.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.2.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.4.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.4.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.4.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.5.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.6.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.6.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.6.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.8.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.8.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.8.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.9.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.10.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.10.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.10.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.11.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.12.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.12.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.12.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.14.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.14.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.14.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.15.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.16.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.16.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.16.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.18.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.18.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.18.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.19.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.20.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.20.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.20.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.22.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.22.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.22.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.22.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.22.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.mtp.layers.0.transformer_layer.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.0.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.0.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.0.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.0.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.1.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.2.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.2.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.2.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.4.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.4.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.4.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.5.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.6.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.6.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.6.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.8.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.8.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.8.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.9.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.10.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.10.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.10.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.10.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.10.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.11.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.12.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.12.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.12.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.12.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.12.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.13.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.14.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.14.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.14.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.14.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.14.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.15.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.16.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.16.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.16.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.18.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.18.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.18.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.19.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.20.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.20.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.20.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.22.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.22.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.22.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.22.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.22.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.mtp.layers.0.transformer_layer.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"embedding.word_embeddings.weight": [
+248192,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.0.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.1.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.1.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.1.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.1.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.2.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.5.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.5.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.5.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.5.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.9.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.9.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.9.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.9.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.10.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.13.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.13.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.13.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.13.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.17.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.17.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.17.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.17.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.19.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.21.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.21.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.21.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.21.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.21.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.0.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.1.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.1.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.1.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.1.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.2.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.3.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.5.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.5.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.5.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.5.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.6.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.9.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.9.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.9.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.9.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.10.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.11.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.13.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.13.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.13.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.13.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.14.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.15.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.17.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.17.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.17.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.17.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.19.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.20.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.21.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.21.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.21.self_attention.in_proj.weight.beta": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.21.self_attention.in_proj.weight.alpha": [
+16,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.21.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.23.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"decoder.layers.0.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.1.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.2.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.3.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.3.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"decoder.layers.4.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.5.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.6.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.8.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.10.self_attention.in_proj.weight.z": [
+2048,
+1024
+],
+"decoder.layers.12.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.12.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.14.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.15.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"decoder.layers.16.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.17.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.19.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.20.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.21.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"mtp.layers.0.transformer_layer.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.1.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.8.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.9.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.16.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.17.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.21.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.mtp.layers.0.transformer_layer.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.1.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.1.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.4.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.9.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.10.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.12.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.13.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.13.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.14.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.17.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.17.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.19.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.21.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.mtp.layers.0.eh_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.mtp.layers.0.transformer_layer.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"decoder.layers.0.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.0.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.0.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.4.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.6.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.8.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.8.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.9.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.10.self_attention.in_proj.weight.query": [
+2048,
+1024
+],
+"decoder.layers.12.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.13.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.16.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.16.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"decoder.layers.17.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.18.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.20.self_attention.in_proj.weight.key": [
+2048,
+1024
+],
+"decoder.layers.21.self_attention.in_proj.weight.value": [
+2048,
+1024
+],
+"decoder.layers.22.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"decoder.layers.22.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.3.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.4.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.7.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.8.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.11.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.11.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.14.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.15.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.15.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.18.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.23.self_attention.linear_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.23.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.momentum_buffer.decoder.layers.23.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.0.mlp.linear_fc1.weight": [
+7168,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.0.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.2.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.3.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.4.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.6.self_attention.out_proj.weight": [
+1024,
+2048
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.7.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.8.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.11.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.11.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.15.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.15.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.18.mlp.linear_fc2.weight": [
+1024,
+3584
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.23.self_attention.linear_qkv.weight": [
+5120,
+1024
+],
+"chained_0.optimizer.state.fp32_param.decoder.layers.23.mlp.linear_fc2.weight": [
+1024,
+3584
+]
+}
