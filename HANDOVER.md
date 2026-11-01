@@ -1,8 +1,14 @@
-# Handover: state on 2026-10-30 and how to restart
+# Handover: state on 2026-11-01 and how to restart
 
 This file gives a person or a coding agent everything needed to continue the project, including
 after the CSCS account `yqin` / project `prep23` is closed. Read it first. Then use the other
-documents for detail:
+documents for detail.
+
+**The account expired on 2026-11-01.**
+- Project `prep23` can no longer submit jobs, and nothing is left in the queue.
+- No experiment is in progress. The last one (§5) is finished and written up.
+- Files on the CSCS scratch filesystems may be removed: checkpoints, logs and tokenized data. §2
+  lists what survives elsewhere and how to recreate the rest. Continuing needs a new account (§3).
 
 | Document | What it holds |
 |---|---|
@@ -102,19 +108,32 @@ python3.11 data/build_blend.py --train-tokens 1e12
   | Cross-datacenter traffic | 1× | 2.3–2.4× lower |
   | Step time | 1× | 1.4% faster |
 
-**Open question that motivated the current experiment:** is Dion behind because of the low rank,
-or because of other differences from Muon? The user's hypothesis is that directions with small
-singular values matter little. The candidate explanations are discussed in WORKLOG §8.
+**Why Dion trails Muon: 0.8B spectral experiment** (`analysis/2026-10-30-spectral-weighting/REPORT.md`, WORKLOG §8)
+- Seven 500-step runs with GLOBAL_DP=2, validation loss at step 500:
 
-## 5. In progress: 0.8B spectral experiment (WORKLOG §8)
+  | Run | Val 500 |
+  |---|---|
+  | Dion r=1 | **2.862** |
+  | Muon | 2.924 |
+  | Muon with s^0.5 | 2.986 |
+  | Dion r=1/4 ×2 | 3.031 |
+  | Dion r=1/4 | 3.089 |
+  | Muon on the top 1/4 of directions only | 3.122 |
 
-These seven jobs were **queued and had not started** on 2026-10-30. They were blocked by the
-normal partition's 400-node group limit (`QOSGrpNodeLimit`). If the account closes they are gone;
-resubmit with the commands below.
+- Dion's gap is mostly the rank (0.169), then the step size (0.059).
+- The weak singular directions matter after the first ~150 steps, although they hold only
+  7–13% of the momentum's energy. Dropping them is ahead early and ~0.2 behind from step 350 on.
+- Recommendation: Dion r=1/4 with `DION_SCALE=2` for the large runs, where the gap is smaller
+  (9B: 0.024).
 
-Common setup for all seven: 2 nodes each, about 1.3 h and 2.5 node-hours per run once started.
-Runs use the `train` schedule: 500 steps, ramp from 512, validation at steps 250 and 500. W&B
-project `qwen35-0.8b-cscs`.
+## 5. Done: 0.8B spectral experiment (WORKLOG §8)
+
+All seven runs ran on 2026-10-31 and 2026-11-01; results are in §4 and the report. D was rerun as
+job 3812935. F (exact polar) stopped at step 278 by walltime. Its resume (3815609) was still queued
+when the account expired and was cancelled, so F has only the step-250 validation.
+
+Commands, for reproducing. Common setup for all seven: 2 nodes each, ~1.3 h without filesystem
+stalls; add `EXTRA="dist.distributed_timeout_minutes=90"` against stalls.
 
 ```bash
 source config.sh
@@ -128,22 +147,6 @@ env $COMMON OPTIMIZER=muon-zero1 MUON_SPECTRAL=power:0.5 ./launch.sh train 2 1T 
 env $COMMON OPTIMIZER=muon-zero1 MUON_SPECTRAL=polar ./launch.sh train 2 1T                   # F exact polar (reference)  3798002
 ```
 
-What each comparison isolates:
-
-| Comparison | Question it answers |
-|---|---|
-| A vs G | Does the 9B gap reproduce at 0.8B? |
-| B vs A | Dion's momentum, power iteration and fused-QKV handling, without the low rank |
-| C vs G | Update size (r=1/4 carries half of Muon's RMS) |
-| D vs F | The user's hypothesis: drop the weak directions at equal step size |
-| E vs F | Partial whitening |
-| F vs A | Exact SVD vs Newton–Schulz (they differ, cosine 0.90–0.97, on gradient-like matrices: unit test) |
-
-Compare the validation loss and perplexity at steps 250 and 500, `mtp_1 loss`,
-`mtp_1_acceptance_rate`, and the 10-step-mean curves. Use the scripts in
-`analysis/2026-10-29-dense-parallelism/scripts/` as a template. Single seeds: treat differences
-below ~0.01 in loss as noise.
-
 ## 6. Open issues and known quirks
 
 - **Muon ZeRO-1 + GLOBAL_DP: stage 1 sends ~2× the cross-datacenter bytes of stage 0.** Seen with
@@ -153,7 +156,9 @@ below ~0.01 in loss as noise.
 - **The MTP loss's perplexity is not logged per step** (it is exp of W&B `mtp_1 loss`). The level-1
   timers reach W&B and TensorBoard only; console printing is suppressed by Bridge.
 - **Stalls on the shared filesystem** (iopsstor) can cost tens of minutes.
-  `time/data_wait_max_s` shows whether a rank waited for data; no stall has been caught with it yet.
+  `time/data_wait_max_s` shows whether a rank waited for data. It caught every stall in the 0.8B
+  runs: 50–123 min per run, up to 1,780 s in a single step on one rank. Fix it by staging the data
+  off iopsstor.
 - **9B at TP1 PP1 runs out of memory even on 8 nodes.** With GLOBAL_DP=2 the optimizer state is
   sharded over half as many GPUs: 9B needs ≥ 4 nodes (PP 2).
 - **Clariden:** ~80 nodes keep dropping out and are excluded automatically

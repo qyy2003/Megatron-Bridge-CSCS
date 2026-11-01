@@ -1,6 +1,6 @@
 # Megatron-Bridge-CSCS
 
-> **Start with [HANDOVER.md](HANDOVER.md)**: current state, where everything lives, how to restart on a new account, and the experiment in progress.
+> **Start with [HANDOVER.md](HANDOVER.md)**: current state, where everything lives, how to restart on a new account (the CSCS account expired on 2026-11-01), and the latest results.
 
 Pretrain **Qwen3.5/3.6-35B-A3B from scratch** on CSCS Alps (Clariden, 4× GH200 per node,
 Slingshot-11) with **Megatron-Bridge**, on the **Nemotron 3.5 Lightning open-data blend**,

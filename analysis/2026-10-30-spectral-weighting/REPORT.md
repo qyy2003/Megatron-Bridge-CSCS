@@ -1,6 +1,6 @@
 # Why is Dion behind Muon, and do the small singular directions matter?
 
-Experiments of 2026-10-31 on Qwen3.5-0.8B, with momentum spectra from the 9B and 0.8B checkpoints.
+Experiments of 2026-10-31 and 2026-11-01 on Qwen3.5-0.8B, with momentum spectra from the 9B and 0.8B checkpoints.
 Jobs are listed in `WORKLOG.md` §8 and runs are in the W&B project `qwen35-0.8b-cscs`. The figures and
 CSVs are produced by `scripts/analyze.py` (W&B), `scripts/spectra_figure.py` (checkpoint spectra) and
 `scripts/dion_full_rank_sim.py` (toy).
@@ -15,13 +15,17 @@ the possible causes.
 1. **Most of Dion's gap is the rank.** At 0.8B the step-500 validation gap is +0.165. Restoring
    Muon's step size takes back 0.059 of it. At the same step size, going from rank 1/4 to full rank
    takes back 0.169. Full-rank Dion is even 0.062 *better* than Muon.
-2. **The small directions matter after the first ~150 steps.** Every variant that gives the weak
-   directions less weight than Muon wins early and loses later:
-   - power 0.5 (E): −0.93 at step 25, +0.061 at step 500;
-   - rank 1/4 at Muon's step size (C): −0.39 at step 50, +0.10 at step 500;
-   - Muon on only the top 1/4 of directions (D): PENDING.
-
-   The MTP head is hurt most.
+2. **The small directions matter after the first ~150 steps.**
+   - **The direct test of the hypothesis is run D.** It is Muon restricted to the top quarter of
+     singular directions, at Muon's step size. The discarded directions hold only 13% of the
+     momentum's energy.
+   - D is the *worst* run at step 500: validation loss +0.198 above Muon, PPL 22.7 vs 18.6. It
+     leads by 0.43 at step 50, falls behind at step ~150, and its gap grows to ~0.20 by step 350
+     and stays there.
+   - Every other variant that gives the weak directions less weight shows the same crossover:
+     - power 0.5 (E): −0.93 at step 25, +0.061 at step 500;
+     - Dion rank 1/4 at Muon's step size (C): −0.39 at step 50, +0.10 at step 500.
+   - The MTP head is hurt most.
 3. **The user's premise is right; the conclusion does not follow.** The momentum really is
    concentrated: 87% (0.8B) and 93% (9B) of its energy lies in the top quarter of directions.
    - But gradient size is not the value of a step. The large directions are high-curvature
@@ -65,15 +69,16 @@ All runs use Muon's momentum (0.95, Nesterov), LR, weight decay and per-shape sc
 |---|---|---|---|---|---|---|
 | A Muon | 4.206 | 2.924 (18.62) | – | 3.283 | 43.1% | 7.47 s / 0.04 s |
 | B Dion r=1 | **4.049** | **2.862 (17.50)** | −0.05 / −0.09 / **−0.065** | **3.220 (−0.063)** | **43.7%** | 7.52 / 0.10 |
-| F exact polar | 4.190 | PENDING | −0.02 / −0.01 / PENDING | | | 7.87 / 0.45 |
+| F exact polar | 4.190 | – (stopped at step 278) | −0.02 / −0.01 / – | | | 7.87 / 0.45 |
 | E power 0.5 | 4.181 | 2.986 (19.81) | **−0.38** / −0.03 / +0.061 | 3.358 (+0.075) | 42.5% | 8.02 / 0.45 |
-| D top 1/4 | PENDING | | | | | |
+| D top 1/4 | 4.306 | 3.122 (22.69) | **−0.43** / +0.10 / +0.192 | 3.450 (+0.167) | 41.6% | 8.06 / 0.45 |
 | C Dion r=1/4 ×2 | 4.340 | 3.031 (20.71) | **−0.39** / +0.16 / +0.104 | 3.400 (+0.117) | 41.9% | 7.56 / 0.03 |
 | G Dion r=1/4 | 4.586 | 3.089 (21.96) | +0.61 / +0.40 / +0.165 | 3.538 (+0.255) | 40.4% | 7.51 / 0.03 |
 
 Train LM loss is a 10-step mean. Steps are the median from step 20 on, excluding the stalls (see
-caveats). E and F pay +0.41 s per step for fp64 eigendecompositions. They are measuring
-instruments, not candidates for production.
+caveats). D, E and F pay +0.41 s per step for fp64 eigendecompositions. They are measuring
+instruments, not candidates for production. F's resume from step 278 never started: the account
+expired while it was queued. So F has no step-500 numbers.
 
 **Where Dion's gap comes from** (validation loss at step 500):
 
@@ -98,21 +103,40 @@ instruments, not candidates for production.
 - **The MTP head suffers most from low rank.** At step 500 its gap is +0.255 for G (LM +0.165) and
   +0.117 for C (LM +0.104).
   - G's MTP gap was still growing until step ~380, while its LM gap had been shrinking since step 200.
+  - C, D and E have a *lower* MTP loss than Muon until step ~380. Then, within ~30 steps, Muon's
+    MTP loss drops faster and all three fall behind.
   - At 9B the persistent MTP gap (acceptance 45.9 vs 46.7%) is the same effect, smaller.
+
+**What happens to the discarded part matters as much as how much is discarded.** The three runs
+at Muon's step size give the weak directions three different fates. The gaps are validation loss
+at step 500, against A.
+
+| Run | Fate of the bottom 3/4 of directions | Gap at 500 | Gap trend, steps 300 → 500 |
+|---|---|---|---|
+| D | never applied | +0.198 | +0.17 → +0.19 (flat at ~0.20 from step 350) |
+| C | applied late, through Dion's error feedback once they reach the top quarter | +0.106 | +0.16 → +0.10 (closing) |
+| A (Muon) | applied every step at full weight | 0 | |
+| B | full-rank Dion | −0.062 | |
+
+C and D also differ in subspace tracking (one power iteration vs exact) and momentum form. Error
+feedback is the large difference: without it the tail is never learned and the gap stays.
 
 ## Do the small singular directions matter?
 
 **Yes, after the first ~150 steps; before that, concentrating the step is better.** Three
 interventions give the weak directions less weight than Muon at the same step size: E, C and D. All
-show the same crossover.
+show the same crossover (train LM loss, 10-step mean).
 
-- **E (s^0.5)** leads by 0.93 at step 25 and is still ahead at step 200. It falls behind at step
-  ~260 and ends +0.061 (MTP +0.075).
-- **C (rank 1/4, Muon's step size)** leads by 0.39 at step 50, falls behind at step ~120, and ends
+- **D (top 1/4 of Muon's directions, no error feedback)** is the cleanest test. It leads by 0.43 at
+  step 50 and falls behind at step 149.
+  - From step 350 on it is ~0.20 behind (val +0.198, MTP +0.167, acceptance 41.6 vs 43.1%).
+  - Dropping 13% of the momentum's energy costs more than anything else we tried.
+- **C (rank 1/4, Muon's step size)** leads by 0.39 at step 50, falls behind at step 126, and ends
   +0.104.
-- **D (top 1/4 of Muon's directions, no error feedback)**: PENDING.
-- The opposite direction, weighting the weak directions *more exactly* than Newton–Schulz (F, B),
-  is never worse than Muon.
+- **E (s^0.5)** keeps every direction but weights it by √s. It leads by 0.93 at step 25 and falls
+  behind at step 272 (+0.061 at step 500, MTP +0.075). It is milder than D, as expected.
+- The opposite direction, weighting the weak directions *more exactly* than Newton–Schulz, is never
+  worse than Muon: F up to step 278 is −0.01 to −0.02, and B is −0.062 at 500.
 
 **What the momentum looks like** (`figures/spectra.png`). These are singular values of the saved
 momentum at step 500, layers 0/8/16/24/31 and the MTP layer, medians over matrices.
@@ -172,8 +196,10 @@ plus noise, and the momentum is 0.95.
   preconditioner. It assumes curvature grows with the gradient's spread, so it boosts the weak,
   low-curvature directions most.
 - **Down-weighting them helps only while the gradient is essentially low rank.** That is the first
-  ~100 steps, when it is dominated by unigram/bigram statistics and the LR is still tiny. There our
-  E and C win by a lot.
+  ~100–150 steps, when it is dominated by unigram/bigram statistics and the LR is still tiny. There
+  D, C and E win by a lot.
+  - D shows what happens afterwards: a fixed loss of ~0.2 that does not close.
+  - With error feedback (C) the loss closes slowly, because the weak directions are learned late.
 - **There is also a data view.** Wang et al. (ICLR 2026) find that Muon's advantage over Adam
   comes from the associative-memory weights (attention value/output and the FFN).
   - Muon's near-isotropic spectrum learns rare ("tail") associations, where Adam and other
@@ -197,10 +223,13 @@ plus noise, and the momentum is 0.95.
 - **Data-loader stalls** on the shared filesystem cost 50–123 min per run (one rank blocked in
   `next(data_iterator)`, up to 1,780 s per step).
   - They change wall time and node-hours, not losses.
-  - They made run D time out at step 1, and run F hit its walltime at step 278 and had to be
-    resumed.
-- **Node-hours.** The experiment used 32.3 node-hours to date, against ~15 planned; the difference
-  is the stalls. The D rerun and the F resume add up to ~11 more.
+  - They made the first D job time out at step 1, and F hit its walltime at step 278.
+  - The D rerun (job 3812935, overnight) had no stalls: 500 steps in 1 h 21 min.
+  - The F resume (job 3815609) waited 14.5 h in the queue. When the account expired on
+    2026-11-01 it became ineligible (`InvalidQOS`) and was cancelled; it never started.
+- **Node-hours.** The experiment used 35.0 node-hours in total, against ~15 planned; the
+  difference is the stalls. F's missing 222 steps would cost ~1.5 node-hours. They are not needed
+  for the conclusions, and they cannot be run on this account.
 
 ## Recommendations
 
@@ -213,11 +242,14 @@ plus noise, and the momentum is 0.95.
      matrix.
 3. **For optimizer comparisons on 0.8B–2B, use Muon or Dion r ≥ 1/2.** Rank 1/4 costs 0.17 there.
 4. **Do not pursue truncated or partially whitened Muon (top-f, power p > 0)** as an improvement.
-   Its gain is real but limited to the first ~150 steps. A short schedule (p = 0.5 for ~100 steps,
-   then polar) could keep it but is worth little.
-5. **Before drawing conclusions for production, run past the warmup.** Two runs (Muon, Dion r=1/4
+   Its gain is real but limited to the first ~150 steps, and truncation without error feedback
+   costs ~0.2 afterwards. A short schedule (p = 0.5 for ~100 steps, then polar) could keep the early
+   gain but is worth little.
+5. **Low-rank compression must keep error feedback** (Dion has it). D shows the cost of dropping
+   the residual instead.
+6. **Before drawing conclusions for production, run past the warmup.** Two runs (Muon, Dion r=1/4
    ×2) of ~2,000 steps on 0.8B would show whether the gap closes after the LR peak, as it did on 9B.
-6. **Fix the data stalls** (prefetch the tokenized data to node-local storage or capstor). They now
+7. **Fix the data stalls** (prefetch the tokenized data to node-local storage or capstor). They now
    cost more node-hours than the optimizers differ by.
 
 ## References
